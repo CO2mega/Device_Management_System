@@ -118,6 +118,8 @@
 </template>
 
 <script>
+import { loanApi } from '@/api/services';
+
 export default {
   name: "BorrowOut",
   data() {
@@ -128,14 +130,8 @@ export default {
       currentPage: 1,
       returnDialogVisible: false,
       returnForm: { id: null, device: "", returnDate: "", remark: "" },
-      borrowRecords: [
-        { id: 1, user: "user1", device: "温度传感器", applyDate: "2024-06-01", borrowDate: "2024-06-02", status: "待审批", adminRemark: "" },
-        { id: 2, user: "user2", device: "压力测试仪", applyDate: "2024-05-25", borrowDate: "2024-05-26", status: "已通过", adminRemark: "实验测试用途" },
-        { id: 3, user: "user3", device: "风速检测仪", applyDate: "2024-04-10", borrowDate: "2024-04-12", status: "已拒绝", adminRemark: "库存不足" },
-        { id: 4, user: "user4", device: "摄像头模块", applyDate: "2024-03-08", borrowDate: "2024-03-10", status: "已归还", adminRemark: "完好归还" },
-        { id: 5, user: "user5", device: "环境监测仪", applyDate: "2024-05-01", borrowDate: "2024-05-03", status: "待审批", adminRemark: "" },
-        { id: 6, user: "user6", device: "电压表", applyDate: "2024-05-10", borrowDate: "2024-05-11", status: "已通过", adminRemark: "短期外借" }
-      ]
+      borrowRecords: [],
+      loading: false
     };
   },
   computed: {
@@ -151,7 +147,41 @@ export default {
       });
     }
   },
+  mounted() {
+    this.fetchBorrowRecords();
+  },
   methods: {
+    async fetchBorrowRecords() {
+      this.loading = true;
+      try {
+        const response = await loanApi.getAll({ size: 100 });
+        const data = response.data;
+        
+        this.borrowRecords = data.content.map(record => ({
+          id: record.id,
+          user: record.applicantName,
+          device: record.deviceName,
+          applyDate: record.applyDate ? record.applyDate.substring(0, 10) : '',
+          borrowDate: record.applyDate ? record.applyDate.substring(0, 10) : '',
+          status: this.mapStatus(record.approvalStatus, record.actualReturnDate),
+          adminRemark: record.purpose || record.rejectionReason || ''
+        }));
+      } catch (error) {
+        console.error('Failed to fetch borrow records:', error);
+        this.$message.error('获取借用记录失败');
+      } finally {
+        this.loading = false;
+      }
+    },
+    mapStatus(approvalStatus, actualReturnDate) {
+      if (actualReturnDate) return '已归还';
+      switch (approvalStatus) {
+        case 'PENDING': return '待审批';
+        case 'APPROVED': return '已通过';
+        case 'REJECTED': return '已拒绝';
+        default: return approvalStatus;
+      }
+    },
     handlePageChange(page) {
       this.currentPage = page;
     },
@@ -164,28 +194,44 @@ export default {
         default: return "";
       }
     },
-    approve(row) {
-      row.status = "已通过";
-      row.adminRemark = "审批通过";
-      this.$message.success(`已通过【${row.device}】的借出申请`);
+    async approve(row) {
+      try {
+        await loanApi.approve(row.id);
+        row.status = "已通过";
+        row.adminRemark = "审批通过";
+        this.$message.success(`已通过【${row.device}】的借出申请`);
+        this.fetchBorrowRecords();
+      } catch (error) {
+        console.error('Failed to approve:', error);
+        this.$message.error('审批失败：' + (error.response?.data?.message || error.message));
+      }
     },
-    reject(row) {
-      row.status = "已拒绝";
-      row.adminRemark = "审批拒绝";
-      this.$message.warning(`已拒绝【${row.device}】的借出申请`);
+    async reject(row) {
+      try {
+        await loanApi.reject(row.id, "审批拒绝");
+        row.status = "已拒绝";
+        row.adminRemark = "审批拒绝";
+        this.$message.warning(`已拒绝【${row.device}】的借出申请`);
+        this.fetchBorrowRecords();
+      } catch (error) {
+        console.error('Failed to reject:', error);
+        this.$message.error('拒绝失败：' + (error.response?.data?.message || error.message));
+      }
     },
     openReturnDialog(row) {
       this.returnForm = { id: row.id, device: row.device, returnDate: "", remark: "" };
       this.returnDialogVisible = true;
     },
-    submitReturn() {
-      const record = this.borrowRecords.find(r => r.id === this.returnForm.id);
-      if (record) {
-        record.status = "已归还";
-        record.adminRemark = this.returnForm.remark || "设备已归还";
+    async submitReturn() {
+      try {
+        await loanApi.returnDevice(this.returnForm.id);
+        this.$message.success("归还登记成功！");
+        this.returnDialogVisible = false;
+        this.fetchBorrowRecords();
+      } catch (error) {
+        console.error('Failed to return device:', error);
+        this.$message.error('归还失败：' + (error.response?.data?.message || error.message));
       }
-      this.$message.success("归还登记成功！");
-      this.returnDialogVisible = false;
     }
   }
 };

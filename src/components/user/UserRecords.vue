@@ -62,49 +62,15 @@
 </template>
 
 <script>
+import { loanApi } from '@/api/services';
+
 export default {
   name: "UserRecords",
   data() {
     return {
       searchQuery: "",
-        records: [
-        { 
-            device: "温度传感器", 
-            borrowDate: "2024-09-01", 
-            returnDate: "2024-09-05", 
-            status: "已归还", 
-            image: require('@/assets/OIP-C.webp') 
-        },
-        { 
-            device: "压力测试仪", 
-            borrowDate: "2024-09-10", 
-            returnDate: "", 
-            status: "借用中", 
-            image: require('@/assets/OIP-C (1).webp') 
-        },
-        { 
-            device: "流量计", 
-            borrowDate: "2024-09-05", 
-            returnDate: "", 
-            status: "逾期", 
-            image: require('@/assets/OIP-C (2).webp') 
-        },
-        { 
-            device: "电压表", 
-            borrowDate: "2024-09-12", 
-            returnDate: "", 
-            status: "借用中", 
-            image: require('@/assets/OIP-C (3).webp') 
-        },
-        { 
-            device: "光学传感器", 
-            borrowDate: "2024-09-01", 
-            returnDate: "2024-09-03", 
-            status: "已归还", 
-            image: require('@/assets/OIP-C (4).webp') 
-        },
-        ]
-
+      records: [],
+      loading: false
     };
   },
   computed: {
@@ -113,12 +79,67 @@ export default {
       return this.records.filter(r => r.device.includes(this.searchQuery));
     }
   },
+  mounted() {
+    this.fetchRecords();
+  },
   methods: {
-    returnDevice(row) {
-      const today = new Date().toISOString().split("T")[0];
-      row.status = "已归还";
-      row.returnDate = today;
-      this.$message.success(`${row.device} 已归还`);
+    async fetchRecords() {
+      this.loading = true;
+      try {
+        // Get loans for the current user
+        const response = await loanApi.getAll({ size: 100 });
+        const data = response.data;
+        
+        this.records = data.content
+          .filter(record => record.approvalStatus === 'APPROVED')
+          .map(record => ({
+            id: record.id,
+            device: record.deviceName,
+            borrowDate: record.applyDate ? record.applyDate.substring(0, 10) : '',
+            returnDate: record.actualReturnDate ? record.actualReturnDate.substring(0, 10) : '',
+            status: this.mapStatus(record),
+            image: this.getDeviceImage(record.deviceName)
+          }));
+      } catch (error) {
+        console.error('Failed to fetch records:', error);
+        this.$message.error('获取借用记录失败');
+      } finally {
+        this.loading = false;
+      }
+    },
+    mapStatus(record) {
+      if (record.actualReturnDate) {
+        return '已归还';
+      }
+      if (record.returnStatus === 'OVERDUE' || 
+          (record.expectedReturnDate && new Date(record.expectedReturnDate) < new Date())) {
+        return '逾期';
+      }
+      return '借用中';
+    },
+    getDeviceImage(deviceName) {
+      // Default images for different device types
+      const imageMap = {
+        '温度传感器': require('@/assets/OIP-C.webp'),
+        '压力测试仪': require('@/assets/OIP-C (1).webp'),
+        '流量计': require('@/assets/OIP-C (2).webp'),
+        '电压表': require('@/assets/OIP-C (3).webp'),
+        '光学传感器': require('@/assets/OIP-C (4).webp')
+      };
+      return imageMap[deviceName] || require('@/assets/OIP-C.webp');
+    },
+    async returnDevice(row) {
+      try {
+        await loanApi.returnDevice(row.id);
+        const today = new Date().toISOString().split("T")[0];
+        row.status = "已归还";
+        row.returnDate = today;
+        this.$message.success(`${row.device} 已归还`);
+        this.fetchRecords();
+      } catch (error) {
+        console.error('Failed to return device:', error);
+        this.$message.error('归还失败：' + (error.response?.data?.message || error.message));
+      }
     }
   }
 };
