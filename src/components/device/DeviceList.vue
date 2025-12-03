@@ -1,0 +1,454 @@
+<template>
+  <div class="device-list-main-view"> 
+    
+    <div class="top-header-controls">
+      <h2 class="page-title">设备列表</h2>
+      <div class="actions-group">
+        <el-input
+          v-model="search"
+          placeholder="请输入设备名称搜索"
+          clearable
+          class="search-box-styled"
+          prefix-icon="el-icon-search"
+          @input="handleSearch"
+        >
+          <i slot="prefix" class="el-input__icon el-icon-search search-icon-prefix"></i>
+        </el-input>
+      </div>
+    </div>
+    
+    <el-row :gutter="20" class="content-split-area">
+      
+      <el-col :span="17" class="table-content-block">
+          
+          <el-table
+            :data="filteredDevices.slice((currentPage-1)*pageSize, currentPage*pageSize)"
+            border
+            style="width: 100%;"
+            class="styled-table glass-table"
+          >
+            <el-table-column prop="id" label="设备编号" width="100"></el-table-column>
+            <el-table-column prop="name" label="设备名称" min-width="150"></el-table-column>
+            <el-table-column prop="location" label="存放位置" min-width="150"></el-table-column>
+            
+            <el-table-column prop="borrowed" label="是否借出" width="120" align="center">
+              <template slot-scope="scope">
+                <el-tag :type="scope.row.borrowed === '否' ? 'success' : 'warning'" class="borrow-tag">
+                  {{ scope.row.borrowed === '是' ? '是' : '否' }}
+                </el-tag>
+              </template>
+            </el-table-column>
+
+            <el-table-column prop="borrowDate" label="借出日期" width="140" align="center">
+              <template slot-scope="scope">
+                {{ scope.row.borrowed === '是' ? scope.row.borrowDate : '-' }}
+              </template>
+            </el-table-column>
+
+            <el-table-column prop="purchaseDate" label="购入日期" width="140"></el-table-column>
+            
+            <el-table-column label="操作" align="center" width="160">
+              <template slot-scope="scope">
+                <el-button 
+                  size="mini" 
+                  class="edit-button-styled" 
+                  @click="handleEdit(scope.row)"
+                >
+                  编辑
+                </el-button>
+                <el-button 
+                  size="mini" 
+                  class="delete-button-styled" 
+                  @click="handleDelete(scope.row)"
+                >
+                  删除
+                </el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+
+          <div class="pagination-container">
+            <el-pagination
+              background
+              layout="prev, pager, next, jumper, total"
+              :page-size="pageSize"
+              :total="filteredDevices.length"
+              :current-page.sync="currentPage"
+              @current-change="handlePageChange"
+              class="styled-pagination"
+            />
+          </div>
+      </el-col>
+      
+      <el-col :span="7">
+        <div class="add-panel">
+          <h2 class="add-title">添加设备</h2>
+          <el-form :model="addForm" label-width="80px" label-position="top">
+            
+            <el-form-item label="设备名称" required>
+              <el-input v-model="addForm.name" placeholder="请输入设备名称" />
+            </el-form-item> 
+
+            <el-form-item label="是否借出" required>
+              <el-select v-model="addForm.borrowed" placeholder="请选择" style="width: 100%">
+                <el-option label="是" value="是" />
+                <el-option label="否" value="否" />
+              </el-select>
+            </el-form-item>
+            
+            <el-form-item label="借出日期" v-if="addForm.borrowed === '是'">
+              <el-date-picker 
+                v-model="addForm.borrowDate" 
+                type="date" 
+                placeholder="选择借出日期" 
+                style="width: 100%"
+                value-format="yyyy-MM-dd"
+              />
+            </el-form-item>
+
+            <el-form-item label="存放位置">
+              <el-input v-model="addForm.location" placeholder="请输入存放位置" />
+            </el-form-item>
+            
+            <el-form-item label="购入日期">
+              <el-date-picker 
+                v-model="addForm.purchaseDate" 
+                type="date" 
+                placeholder="选择购入日期" 
+                style="width: 100%"
+                value-format="yyyy-MM-dd"
+              />
+            </el-form-item>
+            
+            <el-form-item class="submit-button-item">
+              <el-button 
+                type="primary" 
+                @click="submitAdd" 
+                class="submit-add-button-styled"
+              >
+                提交添加
+              </el-button>
+            </el-form-item>
+          </el-form>
+        </div>
+      </el-col>
+      
+    </el-row>
+    
+    <el-dialog
+      title="编辑设备信息"
+      :visible.sync="editDialogVisible"
+      width="500px"
+      class="styled-dialog"
+    >
+      <el-form :model="editForm" label-width="100px">
+        <el-form-item label="设备名称"><el-input v-model="editForm.name" /></el-form-item>
+        <el-form-item label="设备类型"><el-input v-model="editForm.type" /></el-form-item>
+        <el-form-item label="状态">
+          <el-select v-model="editForm.status" placeholder="请选择状态">
+            <el-option label="正常" value="正常" />
+            <el-option label="故障" value="故障" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="是否借出">
+          <el-select v-model="editForm.borrowed" placeholder="请选择">
+            <el-option label="是" value="是" />
+            <el-option label="否" value="否" />
+          </el-select>
+        </el-form-item>
+
+        <el-form-item label="借出日期" v-if="editForm.borrowed === '是'">
+          <el-date-picker 
+            v-model="editForm.borrowDate" 
+            type="date" 
+            placeholder="选择借出日期" 
+            value-format="yyyy-MM-dd" 
+            style="width: 100%"
+          />
+        </el-form-item>
+
+        <el-form-item label="存放位置"><el-input v-model="editForm.location" /></el-form-item>
+
+        <el-form-item label="购入日期">
+          <el-date-picker 
+            v-model="editForm.purchaseDate" 
+            type="date" 
+            placeholder="选择日期" 
+            value-format="yyyy-MM-dd" 
+            style="width: 100%"
+          />
+        </el-form-item>
+
+      </el-form>
+
+      <div slot="footer" class="dialog-footer">
+        <el-button @click="editDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitEdit" class="edit-save-button">保存</el-button>
+      </div>
+    </el-dialog>
+    
+  </div>
+</template>
+
+<script>
+export default {
+  name: "DeviceList",
+  data() {
+    return {
+      search: "",
+      pageSize: 10,
+      currentPage: 1,
+      editDialogVisible: false,
+      editForm: {},
+      addForm: { name: "", type: "", status: "正常", borrowed: "否", location: "", purchaseDate: "", borrowDate: "" },
+      devices: [
+        { id: 1, name: "温度传感器", type: "传感器", status: "正常", borrowed: "否", location: "仓库A区", purchaseDate: "2024-06-01", borrowDate: "" },
+        { id: 2, name: "压力测试仪", type: "检测设备", status: "故障", borrowed: "是", location: "实验室2", purchaseDate: "2023-11-12", borrowDate: "2024-11-20" },
+        { id: 3, name: "摄像头模块", type: "监控设备", status: "正常", borrowed: "否", location: "大门口", purchaseDate: "2024-01-08", borrowDate: "" },
+        { id: 4, name: "环境监测仪", type: "传感器", status: "正常", borrowed: "否", location: "车间1", purchaseDate: "2023-09-14", borrowDate: "" },
+        { id: 5, name: "风速检测仪", type: "检测设备", status: "正常", borrowed: "是", location: "仓库B区", purchaseDate: "2024-05-22", borrowDate: "2024-12-01" },
+        { id: 6, name: "电压表", type: "检测设备", status: "故障", borrowed: "否", location: "实验室1", purchaseDate: "2022-12-03", borrowDate: "" },
+        { id: 7, name: "示波器", type: "电子设备", status: "正常", borrowed: "否", location: "研发室", purchaseDate: "2024-07-15", borrowDate: "" },
+        { id: 8, name: "信号发生器", type: "电子设备", status: "正常", borrowed: "是", location: "测试台", purchaseDate: "2023-10-01", borrowDate: "2024-12-05" },
+        { id: 9, name: "激光测距仪", type: "测量工具", status: "正常", borrowed: "否", location: "工具间", purchaseDate: "2024-03-20", borrowDate: "" },
+        { id: 10, name: "数据采集卡", type: "配件", status: "正常", borrowed: "否", location: "服务器房", purchaseDate: "2024-08-08", borrowDate: "" },
+        { id: 11, name: "网络交换机", type: "网络设备", status: "正常", borrowed: "否", location: "机房", purchaseDate: "2023-05-01", borrowDate: "" },
+        { id: 12, name: "万用表", type: "测量工具", status: "正常", borrowed: "是", location: "实验室3", purchaseDate: "2024-02-10", borrowDate: "2024-12-15" },
+      ]
+    };
+  },
+  computed: {
+    filteredDevices() {
+      if (!this.search) return this.devices;
+      return this.devices.filter(d => d.name.includes(this.search));
+    }
+  },
+  methods: {
+    handleSearch() {
+      this.currentPage = 1;
+    },
+    handleEdit(row) {
+      this.editForm = { ...row };
+      this.editDialogVisible = true;
+    },
+    submitEdit() {
+      if (this.editForm.borrowed === '否') {
+        this.editForm.borrowDate = "";
+      }
+      const index = this.devices.findIndex(d => d.id === this.editForm.id);
+      if (index !== -1) this.devices.splice(index, 1, { ...this.editForm });
+      this.$message.success("修改成功！");
+      this.editDialogVisible = false;
+    },
+    handleDelete(row) {
+      this.$confirm(`确定删除设备【${row.name}】吗？`, "提示", {
+        confirmButtonText: "确定",
+        cancelButtonText: "取消",
+        type: "warning"
+      }).then(() => {
+        this.devices = this.devices.filter(d => d.id !== row.id);
+        this.$message.success("删除成功");
+      }).catch(() => {});
+    },
+    handlePageChange(page) {
+      this.currentPage = page;
+    },
+    submitAdd() {
+      if (!this.addForm.name || !this.addForm.borrowed) {
+          this.$message.error("设备名称和是否借出为必填项！");
+          return;
+      }
+      if (this.addForm.borrowed === '否') {
+        this.addForm.borrowDate = "";
+      }
+
+      const maxId = this.devices.length ? Math.max(...this.devices.map(d => d.id)) : 0;
+      const newDevice = { 
+          id: maxId + 1, 
+          type: this.addForm.type || "其他", 
+          status: this.addForm.status || "正常", 
+          ...this.addForm 
+      }; 
+      this.devices.push(newDevice);
+      this.$message.success("添加成功！");
+      // 重置表单
+      this.addForm = { name: "", type: "", status: "正常", borrowed: "否", location: "", purchaseDate: "", borrowDate: "" };
+      this.currentPage = Math.ceil(this.filteredDevices.length / this.pageSize);
+    }
+  }
+};
+</script>
+
+<style scoped>
+/* 主题色变量（局部替代，组件样式内使用） */
+:root {
+  --tech-cyan: #00c0ff;
+  --tech-violet: #7a8cff;
+  --deep-blue: #062238;
+}
+
+/* -------------------- 整体容器和顶部控制 -------------------- */
+/* 将根容器名称改为 device-list-main-view 以匹配样式习惯 */
+.device-list-main-view {
+  width: 100%;
+  height: 100%;
+  padding: 20px; /* 增加外部 padding，让内容块与边缘有间距 */
+  background-color: transparent; 
+  display: flex;
+  flex-direction: column; 
+}
+
+.top-header-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px; 
+}
+
+/* -------------------- 下方分栏区域 -------------------- */
+.content-split-area {
+    flex-grow: 1; 
+}
+
+/* 移除 el-col 上的 wrapper 样式，让表格紧贴列空间 */
+.table-content-block {
+    display: flex;
+    flex-direction: column;
+    padding: 0 !important; 
+}
+
+
+/* ========================= 左侧：设备列表表格 (高透明度玻璃化) ========================= */
+
+.styled-table.glass-table {
+    border-radius: 15px;
+    overflow: hidden;
+    background-color: rgba(255, 255, 255, 0.38) !important;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(122, 140, 255, 0.12);
+    box-shadow: 0 8px 30px rgba(122, 140, 255, 0.06);
+    flex-grow: 1;
+}
+
+.styled-table /deep/ .el-table__header-wrapper th {
+    background-color: rgba(255, 255, 255, 0.85) !important;
+    color: var(--deep-blue);
+    font-weight: 600;
+    border-color: rgba(6,34,56,0.06);
+}
+
+/* 核心修改：确保表格行背景透明 */
+.styled-table /deep/ .el-table__row {
+    background-color: transparent !important; 
+}
+
+/* 数据行悬停效果 */
+.styled-table /deep/ .el-table__row:hover {
+    background: linear-gradient(90deg, rgba(0,192,255,0.04), rgba(122,140,255,0.03)) !important;
+}
+
+/* Tag 风格：在线为青色，警告为紫色 */
+.borrow-tag {
+    border-radius: 12px;
+    padding: 0 10px;
+    font-weight: 600;
+}
+.borrow-tag .el-tag--success {
+    background: linear-gradient(90deg, var(--tech-cyan), var(--tech-violet));
+    color: #fff;
+}
+
+/* 分页容器 */
+.pagination-container {
+    margin-top: 15px; 
+    text-align: right;
+    display: flex;
+    justify-content: flex-end; 
+}
+
+
+/* ========================= 右侧：添加表单区 (渐变背景+玻璃输入框) ========================= */
+.add-panel {
+  /* 保持柔和渐变 */
+  background: linear-gradient(135deg, rgba(0,192,255,0.12) 0%, rgba(122,140,255,0.14) 100%);
+  padding: 20px;
+  border-radius: 15px;
+  box-shadow: 0 6px 20px rgba(122,140,255,0.06);
+  height: 100%;
+}
+
+/* 右侧表单标题增强 */
+.add-title {
+    color: #fff; /* 标题颜色改为白色 */
+    font-size: 20px;
+    font-weight: bold; 
+    text-shadow: 0 1px 2px rgba(0,0,0,0.15); 
+    margin-bottom: 20px;
+}
+/* 核心修改：右侧表单标签颜色改为白色 */
+.add-panel /deep/ .el-form-item__label {
+    color: #fff;
+}
+
+/* 右侧表单输入框/选择框 - 玻璃化 */
+.add-panel /deep/ .el-input__inner,
+.add-panel /deep/ .el-textarea__inner,
+.add-panel /deep/ .el-select .el-input__inner,
+.add-panel /deep/ .el-date-editor.el-input,
+.add-panel /deep/ .el-date-editor.el-input__inner {
+    background-color: rgba(255,255,255,0.92) !important;
+    border-radius: 8px;
+    border: 1px solid rgba(6,34,56,0.06);
+}
+
+/* 确保 el-select 的 dropdown 背景也透明化，保持一致性 */
+.el-popper /deep/ .el-select-dropdown {
+    background-color: rgba(255, 255, 255, 0.9) !important;
+    backdrop-filter: blur(5px);
+    border-radius: 10px;
+}
+.el-popper /deep/ .el-select-dropdown__item {
+    color: #333;
+}
+
+
+/* -------------------- 按钮/搜索/分页细节样式 (采用柔和紫色作为主色调) -------------------- */
+.page-title {
+  font-size: 22px;
+  color: var(--deep-blue);
+  margin: 0;
+}
+.search-box-styled {
+    width: 250px;
+}
+.search-box-styled /deep/ .el-input__inner {
+    border-radius: 18px;
+    height: 40px;
+    background: rgba(255,255,255,0.9);
+    border: 1px solid rgba(0,192,255,0.14);
+}
+
+/* 编辑按钮 - 柔和紫作为主操作色 */
+.edit-button-styled {
+  background: linear-gradient(90deg, var(--tech-cyan), var(--tech-violet));
+  color: #fff;
+  border: none;
+}
+/* 删除按钮 - 柔和蓝色 */
+.delete-button-styled { 
+    background: rgba(255, 80, 80, 0.12);
+    color: #d64545;
+    border: 1px solid rgba(214,69,69,0.12);
+}
+
+/* 提交添加按钮 - 柔和紫 */
+.submit-add-button-styled {
+    width: 100%;
+    margin-top: 10px;
+    border-radius: 10px;
+    background-color: #9575CD !important; 
+    border-color: #9575CD !important;
+    font-weight: bold;
+    box-shadow: 0 4px 10px rgba(149, 117, 205, 0.4); 
+}
+</style>
