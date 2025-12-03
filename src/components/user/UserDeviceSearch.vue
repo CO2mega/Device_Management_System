@@ -14,24 +14,15 @@
 </template>
 
 <script>
+import { deviceApi } from '@/api/services';
+
 export default {
   name: "UserDeviceSearch",
   data() {
     return {
       searchQuery: "",
-      devices: [
-  { name: "温度传感器", type: "传感器", status: "正常", location: "仓库A" },
-  { name: "压力测试仪", type: "检测设备", status: "故障", location: "实验室2" },
-  { name: "流量计", type: "计量设备", status: "正常", location: "仓库B" },
-  { name: "电压表", type: "测量设备", status: "正常", location: "实验室1" },
-  { name: "光学传感器", type: "传感器", status: "维修中", location: "仓库C" },
-  { name: "湿度计", type: "传感器", status: "正常", location: "仓库A" },
-  { name: "微波功率计", type: "检测设备", status: "正常", location: "实验室3" },
-  { name: "激光测距仪", type: "测量设备", status: "故障", location: "仓库B" },
-  { name: "红外热像仪", type: "检测设备", status: "正常", location: "实验室2" },
-  { name: "电流表", type: "测量设备", status: "正常", location: "仓库C" }
-]
-,
+      devices: [],
+      loading: false
     };
   },
   computed: {
@@ -42,7 +33,30 @@ export default {
       );
     }
   },
+  mounted() {
+    this.fetchDevices();
+  },
   methods: {
+    async fetchDevices() {
+      this.loading = true;
+      try {
+        const response = await deviceApi.getAll({ size: 100 });
+        const data = response.data;
+        
+        this.devices = data.content.map(device => ({
+          id: device.id,
+          name: device.name,
+          type: device.type || '其他',
+          status: device.status || '正常',
+          location: device.location || ''
+        }));
+      } catch (error) {
+        console.error('Failed to fetch devices:', error);
+        this.$message.error('获取设备列表失败');
+      } finally {
+        this.loading = false;
+      }
+    },
     search() {
       this.$message.info(`搜索关键字：${this.searchQuery}`);
     }

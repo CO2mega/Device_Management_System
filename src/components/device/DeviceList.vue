@@ -191,6 +191,8 @@
 </template>
 
 <script>
+import { deviceApi } from '@/api/services';
+
 export default {
   name: "DeviceList",
   data() {
@@ -198,23 +200,12 @@ export default {
       search: "",
       pageSize: 10,
       currentPage: 1,
+      totalElements: 0,
       editDialogVisible: false,
       editForm: {},
       addForm: { name: "", type: "", status: "正常", borrowed: "否", location: "", purchaseDate: "", borrowDate: "" },
-      devices: [
-        { id: 1, name: "温度传感器", type: "传感器", status: "正常", borrowed: "否", location: "仓库A区", purchaseDate: "2024-06-01", borrowDate: "" },
-        { id: 2, name: "压力测试仪", type: "检测设备", status: "故障", borrowed: "是", location: "实验室2", purchaseDate: "2023-11-12", borrowDate: "2024-11-20" },
-        { id: 3, name: "摄像头模块", type: "监控设备", status: "正常", borrowed: "否", location: "大门口", purchaseDate: "2024-01-08", borrowDate: "" },
-        { id: 4, name: "环境监测仪", type: "传感器", status: "正常", borrowed: "否", location: "车间1", purchaseDate: "2023-09-14", borrowDate: "" },
-        { id: 5, name: "风速检测仪", type: "检测设备", status: "正常", borrowed: "是", location: "仓库B区", purchaseDate: "2024-05-22", borrowDate: "2024-12-01" },
-        { id: 6, name: "电压表", type: "检测设备", status: "故障", borrowed: "否", location: "实验室1", purchaseDate: "2022-12-03", borrowDate: "" },
-        { id: 7, name: "示波器", type: "电子设备", status: "正常", borrowed: "否", location: "研发室", purchaseDate: "2024-07-15", borrowDate: "" },
-        { id: 8, name: "信号发生器", type: "电子设备", status: "正常", borrowed: "是", location: "测试台", purchaseDate: "2023-10-01", borrowDate: "2024-12-05" },
-        { id: 9, name: "激光测距仪", type: "测量工具", status: "正常", borrowed: "否", location: "工具间", purchaseDate: "2024-03-20", borrowDate: "" },
-        { id: 10, name: "数据采集卡", type: "配件", status: "正常", borrowed: "否", location: "服务器房", purchaseDate: "2024-08-08", borrowDate: "" },
-        { id: 11, name: "网络交换机", type: "网络设备", status: "正常", borrowed: "否", location: "机房", purchaseDate: "2023-05-01", borrowDate: "" },
-        { id: 12, name: "万用表", type: "测量工具", status: "正常", borrowed: "是", location: "实验室3", purchaseDate: "2024-02-10", borrowDate: "2024-12-15" },
-      ]
+      devices: [],
+      loading: false
     };
   },
   computed: {
@@ -223,57 +214,108 @@ export default {
       return this.devices.filter(d => d.name.includes(this.search));
     }
   },
+  mounted() {
+    this.fetchDevices();
+  },
   methods: {
+    async fetchDevices() {
+      this.loading = true;
+      try {
+        const response = await deviceApi.getAll({
+          search: this.search || undefined,
+          page: this.currentPage - 1,
+          size: this.pageSize
+        });
+        const data = response.data;
+        this.devices = data.content.map(device => ({
+          id: device.id,
+          name: device.name,
+          type: device.type || '',
+          status: device.status || '正常',
+          borrowed: device.isLoaned ? '是' : '否',
+          location: device.location || '',
+          purchaseDate: device.purchaseDate || '',
+          borrowDate: device.loanDate || ''
+        }));
+        this.totalElements = data.totalElements;
+      } catch (error) {
+        console.error('Failed to fetch devices:', error);
+        this.$message.error('获取设备列表失败');
+      } finally {
+        this.loading = false;
+      }
+    },
     handleSearch() {
       this.currentPage = 1;
+      this.fetchDevices();
     },
     handleEdit(row) {
       this.editForm = { ...row };
       this.editDialogVisible = true;
     },
-    submitEdit() {
-      if (this.editForm.borrowed === '否') {
-        this.editForm.borrowDate = "";
+    async submitEdit() {
+      try {
+        if (this.editForm.borrowed === '否') {
+          this.editForm.borrowDate = "";
+        }
+        await deviceApi.update(this.editForm.id, {
+          name: this.editForm.name,
+          type: this.editForm.type,
+          status: this.editForm.status,
+          location: this.editForm.location,
+          purchaseDate: this.editForm.purchaseDate || null,
+          isLoaned: this.editForm.borrowed === '是',
+          loanDate: this.editForm.borrowDate || null
+        });
+        this.$message.success("修改成功！");
+        this.editDialogVisible = false;
+        this.fetchDevices();
+      } catch (error) {
+        console.error('Failed to update device:', error);
+        this.$message.error('修改失败：' + (error.response?.data?.message || error.message));
       }
-      const index = this.devices.findIndex(d => d.id === this.editForm.id);
-      if (index !== -1) this.devices.splice(index, 1, { ...this.editForm });
-      this.$message.success("修改成功！");
-      this.editDialogVisible = false;
     },
     handleDelete(row) {
       this.$confirm(`确定删除设备【${row.name}】吗？`, "提示", {
         confirmButtonText: "确定",
         cancelButtonText: "取消",
         type: "warning"
-      }).then(() => {
-        this.devices = this.devices.filter(d => d.id !== row.id);
-        this.$message.success("删除成功");
+      }).then(async () => {
+        try {
+          await deviceApi.delete(row.id);
+          this.$message.success("删除成功");
+          this.fetchDevices();
+        } catch (error) {
+          console.error('Failed to delete device:', error);
+          this.$message.error('删除失败：' + (error.response?.data?.message || error.message));
+        }
       }).catch(() => {});
     },
     handlePageChange(page) {
       this.currentPage = page;
+      this.fetchDevices();
     },
-    submitAdd() {
-      if (!this.addForm.name || !this.addForm.borrowed) {
-          this.$message.error("设备名称和是否借出为必填项！");
+    async submitAdd() {
+      if (!this.addForm.name) {
+          this.$message.error("设备名称为必填项！");
           return;
       }
-      if (this.addForm.borrowed === '否') {
-        this.addForm.borrowDate = "";
-      }
 
-      const maxId = this.devices.length ? Math.max(...this.devices.map(d => d.id)) : 0;
-      const newDevice = { 
-          id: maxId + 1, 
-          type: this.addForm.type || "其他", 
-          status: this.addForm.status || "正常", 
-          ...this.addForm 
-      }; 
-      this.devices.push(newDevice);
-      this.$message.success("添加成功！");
-      // 重置表单
-      this.addForm = { name: "", type: "", status: "正常", borrowed: "否", location: "", purchaseDate: "", borrowDate: "" };
-      this.currentPage = Math.ceil(this.filteredDevices.length / this.pageSize);
+      try {
+        await deviceApi.create({
+          name: this.addForm.name,
+          type: this.addForm.type || "其他",
+          status: this.addForm.status || "正常",
+          location: this.addForm.location,
+          purchaseDate: this.addForm.purchaseDate || null
+        });
+        this.$message.success("添加成功！");
+        this.addForm = { name: "", type: "", status: "正常", borrowed: "否", location: "", purchaseDate: "", borrowDate: "" };
+        this.fetchDevices();
+      } catch (error) {
+        console.error('Failed to create device:', error);
+        this.$message.error('添加失败：' + (error.response?.data?.message || error.message));
+      }
     }
   }
 };

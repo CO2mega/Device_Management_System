@@ -108,30 +108,95 @@
 </template>
 
 <script>
+import { loanApi } from '@/api/services';
+
 export default {
   name: "UserProfile",
   data() {
     return {
       user: {
-        username: "普通用户",
-        email: "user@example.com",
-        phone: "13800138000",
-        registeredAt: "2024-06-01",
-        role: "用户",
+        username: "",
+        email: "",
+        phone: "",
+        registeredAt: "",
+        role: "",
         avatar: null,
       },
-      recentRecords: [
-        { device: "温度传感器", borrowDate: "2024-09-01", returnDate: "2024-09-05", status: "已归还", image: require('@/assets/OIP-C.webp') },
-        { device: "压力测试仪", borrowDate: "2024-09-10", returnDate: "", status: "借用中", image: require('@/assets/OIP-C (1).webp') },
-        { device: "流量计", borrowDate: "2024-09-05", returnDate: "", status: "逾期", image: require('@/assets/OIP-C (2).webp') },
-      ],
+      recentRecords: [],
       editDialog: false,
       passwordDialog: false,
       newPassword: "",
       confirmPassword: "",
+      loading: false
     };
   },
+  mounted() {
+    this.loadUserInfo();
+    this.fetchRecentRecords();
+  },
   methods: {
+    loadUserInfo() {
+      // Load user info from localStorage
+      const userStr = localStorage.getItem('user');
+      if (userStr) {
+        try {
+          const userData = JSON.parse(userStr);
+          this.user = {
+            username: userData.username || '普通用户',
+            email: userData.email || '',
+            phone: userData.phone || '',
+            registeredAt: userData.createdAt ? userData.createdAt.substring(0, 10) : '',
+            role: userData.role === 'ADMIN' ? '管理员' : '用户',
+            avatar: null
+          };
+        } catch (e) {
+          console.error('Failed to parse user info:', e);
+        }
+      }
+    },
+    async fetchRecentRecords() {
+      this.loading = true;
+      try {
+        const response = await loanApi.getAll({ size: 5 });
+        const data = response.data;
+        
+        this.recentRecords = data.content
+          .filter(record => record.approvalStatus === 'APPROVED')
+          .slice(0, 3)
+          .map(record => ({
+            id: record.id,
+            device: record.deviceName,
+            borrowDate: record.applyDate ? record.applyDate.substring(0, 10) : '',
+            returnDate: record.actualReturnDate ? record.actualReturnDate.substring(0, 10) : '',
+            status: this.mapStatus(record),
+            image: this.getDeviceImage(record.deviceName)
+          }));
+      } catch (error) {
+        console.error('Failed to fetch recent records:', error);
+      } finally {
+        this.loading = false;
+      }
+    },
+    mapStatus(record) {
+      if (record.actualReturnDate) {
+        return '已归还';
+      }
+      if (record.returnStatus === 'OVERDUE' || 
+          (record.expectedReturnDate && new Date(record.expectedReturnDate) < new Date())) {
+        return '逾期';
+      }
+      return '借用中';
+    },
+    getDeviceImage(deviceName) {
+      const imageMap = {
+        '温度传感器': require('@/assets/OIP-C.webp'),
+        '压力测试仪': require('@/assets/OIP-C (1).webp'),
+        '流量计': require('@/assets/OIP-C (2).webp'),
+        '电压表': require('@/assets/OIP-C (3).webp'),
+        '光学传感器': require('@/assets/OIP-C (4).webp')
+      };
+      return imageMap[deviceName] || require('@/assets/OIP-C.webp');
+    },
     handleAvatarChange(file) {
       const reader = new FileReader();
       reader.onload = e => {

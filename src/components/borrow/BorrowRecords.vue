@@ -156,7 +156,8 @@
 </template>
 
 <script>
-// (保持 <script> 部分不变，因为它负责数据和逻辑)
+import { loanApi } from '@/api/services';
+
 export default {
   name: "BorrowOut",
   data() {
@@ -168,36 +169,21 @@ export default {
       currentDetail: {},
       filterForm: {
         status: "",
-        dateRange: null, // [start, end]
+        dateRange: null,
       },
-      // 模拟数据
-      allRecords: [
-        { id: 1001, deviceName: "温度传感器", applicant: "张三", applicationDate: "2025-11-28", expectedReturnDate: "2025-12-15", status: "待处理", reason: "用于新产品测试" },
-        { id: 1002, deviceName: "压力测试仪", applicant: "李四", applicationDate: "2025-11-27", expectedReturnDate: "2025-12-10", status: "已批准", reason: "例行设备校准" },
-        { id: 1003, deviceName: "信号发生器", applicant: "王五", applicationDate: "2025-11-26", expectedReturnDate: "2025-12-20", status: "已驳回", reason: "设备类型不匹配" },
-        { id: 1004, deviceName: "网络交换机", applicant: "赵六", applicationDate: "2025-11-25", expectedReturnDate: "2025-12-05", status: "待处理", reason: "临时搭建测试环境" },
-        { id: 1005, deviceName: "激光测距仪", applicant: "孙七", applicationDate: "2025-11-20", expectedReturnDate: "2025-12-01", status: "已批准", reason: "工程测量" },
-        { id: 1006, deviceName: "万用表", applicant: "周八", applicationDate: "2025-11-15", expectedReturnDate: "2025-12-08", status: "已批准", reason: "日常维修" },
-        { id: 1007, deviceName: "示波器", applicant: "吴九", applicationDate: "2025-11-10", expectedReturnDate: "2025-12-01", status: "待处理", reason: "高精度信号分析" },
-        { id: 1008, deviceName: "电源模块", applicant: "郑十", applicationDate: "2025-11-05", expectedReturnDate: "2025-11-30", status: "已驳回", reason: "库存不足" },
-        // 更多数据
-        { id: 1009, deviceName: "环境监测仪", applicant: "冯十一", applicationDate: "2025-10-28", expectedReturnDate: "2025-11-25", status: "已批准", reason: "长期环境监控" },
-        { id: 1010, deviceName: "电压表", applicant: "陈十二", applicationDate: "2025-10-20", expectedReturnDate: "2025-11-10", status: "已批准", reason: "车间巡检" },
-        { id: 1011, deviceName: "摄像头模块", applicant: "卫十三", applicationDate: "2025-10-15", expectedReturnDate: "2025-11-01", status: "已批准", reason: "安防系统升级" },
-      ].sort((a, b) => b.id - a.id) // 按ID倒序
+      allRecords: [],
+      loading: false
     };
   },
   computed: {
     // 待处理申请 (用于卡片显示)
     pendingApplications() {
-      return this.allRecords.filter(r => r.status === '待处理').slice(0, 5); // 只显示前5条
+      return this.allRecords.filter(r => r.status === '待处理').slice(0, 5);
     },
-    // 计算属性: 根据搜索和筛选条件过滤记录 (注意：虽然移除了筛选栏，但仍保留了内部筛选逻辑，只依赖全局搜索)
     filteredRecords() {
       let records = this.allRecords;
       const lowerSearch = this.search.toLowerCase();
       
-      // 1. 全局搜索
       if (lowerSearch) {
         records = records.filter(r => 
           String(r.id).includes(lowerSearch) || 
@@ -205,19 +191,14 @@ export default {
           r.applicant.toLowerCase().includes(lowerSearch)
         );
       }
-      
-      // 注意：这里移除了对 filterForm.status 和 filterForm.dateRange 的依赖，
-      // 因为前端没有 UI 元素来设置它们了。如果需要，您可以通过编程方式设置 filterForm。
 
       return records;
     },
-    // 当前页显示的记录
     pagedRecords() {
       const start = (this.currentPage - 1) * this.pageSize;
       const end = start + this.pageSize;
       return this.filteredRecords.slice(start, end);
     },
-    // 统计概览数据
     summary() {
       const pendingCount = this.allRecords.filter(r => r.status === '待处理').length;
       const approvedCount = this.allRecords.filter(r => r.status === '已批准').length;
@@ -225,14 +206,47 @@ export default {
       return { pendingCount, approvedCount, rejectedCount };
     }
   },
+  mounted() {
+    this.fetchLoanRecords();
+  },
   methods: {
+    async fetchLoanRecords() {
+      this.loading = true;
+      try {
+        const response = await loanApi.getAll({ size: 100 });
+        const data = response.data;
+        
+        this.allRecords = data.content.map(record => ({
+          id: record.id,
+          deviceName: record.deviceName,
+          applicant: record.applicantName,
+          applicationDate: record.applyDate ? record.applyDate.substring(0, 10) : '',
+          expectedReturnDate: record.expectedReturnDate || '',
+          status: this.mapApprovalStatus(record.approvalStatus),
+          reason: record.purpose || '',
+          rejectionReason: record.rejectionReason || ''
+        })).sort((a, b) => b.id - a.id);
+      } catch (error) {
+        console.error('Failed to fetch loan records:', error);
+        this.$message.error('获取借用记录失败');
+      } finally {
+        this.loading = false;
+      }
+    },
+    mapApprovalStatus(status) {
+      switch (status) {
+        case 'PENDING': return '待处理';
+        case 'APPROVED': return '已批准';
+        case 'REJECTED': return '已驳回';
+        default: return status;
+      }
+    },
     handleSearch() {
       this.currentPage = 1;
     },
     handlePageChange(page) {
       this.currentPage = page;
     },
-    // 移除了 applyFilter 方法，因为筛选 UI 已移除
     getStatusTagType(status) {
       switch (status) {
         case '待处理': return 'warning';
@@ -241,38 +255,41 @@ export default {
         default: return 'info';
       }
     },
-    // 查看详情
     viewDetails(row) {
       this.currentDetail = { ...row };
       this.detailDialogVisible = true;
     },
-    // 批准操作
-    handleApprove(app) {
+    async handleApprove(app) {
       this.$confirm(`确定批准 ${app.applicant} 借用 ${app.deviceName} 吗？`, "批准申请", {
         confirmButtonText: "确定批准",
         cancelButtonText: "取消",
         type: "success"
-      }).then(() => {
-        const index = this.allRecords.findIndex(r => r.id === app.id);
-        if (index !== -1) {
-          this.allRecords[index].status = '已批准';
+      }).then(async () => {
+        try {
+          await loanApi.approve(app.id);
           this.$message.success("申请已批准并记录！");
           this.detailDialogVisible = false;
+          this.fetchLoanRecords();
+        } catch (error) {
+          console.error('Failed to approve loan:', error);
+          this.$message.error('批准失败：' + (error.response?.data?.message || error.message));
         }
       }).catch(() => {});
     },
-    // 驳回操作
-    handleReject(app) {
+    async handleReject(app) {
       this.$confirm(`确定驳回 ${app.applicant} 借用 ${app.deviceName} 的申请吗？`, "驳回申请", {
         confirmButtonText: "确定驳回",
         cancelButtonText: "取消",
         type: "warning"
-      }).then(() => {
-        const index = this.allRecords.findIndex(r => r.id === app.id);
-        if (index !== -1) {
-          this.allRecords[index].status = '已驳回';
+      }).then(async () => {
+        try {
+          await loanApi.reject(app.id, '申请被驳回');
           this.$message.warning("申请已驳回。");
           this.detailDialogVisible = false;
+          this.fetchLoanRecords();
+        } catch (error) {
+          console.error('Failed to reject loan:', error);
+          this.$message.error('驳回失败：' + (error.response?.data?.message || error.message));
         }
       }).catch(() => {});
     }

@@ -116,52 +116,88 @@
 
 <script>
 import { defineComponent } from 'vue';
+import { loanApi } from '@/api/services';
 
 export default defineComponent({
   name: 'ReturnRecords',
   data() {
-    // 模拟数据
-    const records = [
-      { id: 2001, deviceName: "温度传感器", borrower: "张三", borrowDate: "2025-11-01", expectedReturnDate: "2025-11-15", actualReturnDate: "2025-11-14", status: "正常归还", duration: 13 },
-      { id: 2002, deviceName: "压力测试仪", borrower: "李四", borrowDate: "2025-10-20", expectedReturnDate: "2025-11-10", actualReturnDate: "2025-11-15", status: "逾期归还", duration: 26 },
-      { id: 2003, deviceName: "信号发生器", borrower: "王五", borrowDate: "2025-11-05", expectedReturnDate: "2025-11-20", actualReturnDate: "2025-11-20", status: "正常归还", duration: 15 },
-      { id: 2004, deviceName: "网络交换机", borrower: "赵六", borrowDate: "2025-10-15", expectedReturnDate: "2025-11-01", actualReturnDate: "2025-11-03", status: "逾期归还", duration: 19 },
-      { id: 2005, deviceName: "激光测距仪", borrower: "孙七", borrowDate: "2025-11-10", expectedReturnDate: "2025-11-25", actualReturnDate: "2025-11-24", status: "正常归还", duration: 14 },
-      { id: 2006, deviceName: "万用表", borrower: "周八", borrowDate: "2025-11-15", expectedReturnDate: "2025-12-05", actualReturnDate: "2025-12-01", status: "正常归还", duration: 16 },
-      { id: 2007, deviceName: "示波器", borrower: "吴九", borrowDate: "2025-10-01", expectedReturnDate: "2025-10-30", actualReturnDate: "2025-11-05", status: "逾期归还", duration: 35 },
-      // ... 更多数据
-    ].sort((a, b) => new Date(b.actualReturnDate) - new Date(a.actualReturnDate)); // 按归还日期倒序
-
     return {
-      pageSize: 8, // 与借用记录保持一致
+      pageSize: 8,
       currentPage: 1,
-      allRecords: records,
+      allRecords: [],
+      loading: false
     };
   },
   computed: {
-    // 统计概览数据 (保持不变)
     summary() {
       const totalCount = this.allRecords.length;
       const normalCount = this.allRecords.filter(r => r.status === '正常归还').length;
       const overdueCount = this.allRecords.filter(r => r.status === '逾期归还').length;
       return { totalCount, normalCount, overdueCount };
     },
-    // 近期归还时间轴数据 (最新的5条) (保持不变)
     recentReturns() {
       return this.allRecords.slice(0, 5);
     },
-    // 过滤记录
     filteredRecords() {
       return this.allRecords;
     },
-    // 当前页显示的记录 (保持不变)
     pagedRecords() {
       const start = (this.currentPage - 1) * this.pageSize;
       const end = start + this.pageSize;
       return this.filteredRecords.slice(start, end);
     },
   },
+  mounted() {
+    this.fetchReturnRecords();
+  },
   methods: {
+    async fetchReturnRecords() {
+      this.loading = true;
+      try {
+        const response = await loanApi.getAll({ size: 100 });
+        const data = response.data;
+        
+        // Filter only returned records (actualReturnDate is not null)
+        this.allRecords = data.content
+          .filter(record => record.actualReturnDate)
+          .map(record => {
+            const borrowDate = record.applyDate ? record.applyDate.substring(0, 10) : '';
+            const actualReturnDate = record.actualReturnDate ? record.actualReturnDate.substring(0, 10) : '';
+            
+            // Calculate duration
+            let duration = 0;
+            if (borrowDate && actualReturnDate) {
+              const start = new Date(borrowDate);
+              const end = new Date(actualReturnDate);
+              duration = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
+            }
+            
+            return {
+              id: record.id,
+              deviceName: record.deviceName,
+              borrower: record.applicantName,
+              borrowDate: borrowDate,
+              expectedReturnDate: record.expectedReturnDate || '',
+              actualReturnDate: actualReturnDate,
+              status: this.mapReturnStatus(record.returnStatus),
+              duration: duration
+            };
+          })
+          .sort((a, b) => new Date(b.actualReturnDate) - new Date(a.actualReturnDate));
+      } catch (error) {
+        console.error('Failed to fetch return records:', error);
+        this.$message.error('获取归还记录失败');
+      } finally {
+        this.loading = false;
+      }
+    },
+    mapReturnStatus(status) {
+      switch (status) {
+        case 'NORMAL': return '正常归还';
+        case 'OVERDUE': return '逾期归还';
+        default: return status || '正常归还';
+      }
+    },
     getStatusTagType(status) {
       switch (status) {
         case '正常归还': return 'success';
@@ -170,7 +206,6 @@ export default defineComponent({
       }
     },
     viewDetails(row) {
-      // 实际应用中可以打开一个 Dialog 显示详情
       console.log('Viewing details:', row);
       this.$message.info(`查看 ${row.deviceName} 的归还详情`);
     }

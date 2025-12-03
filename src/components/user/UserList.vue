@@ -27,23 +27,24 @@
             border
             style="width: 100%;"
             class="styled-table glass-table"
+            v-loading="loading"
           >
             <el-table-column prop="staffId" label="工号" width="100"></el-table-column>
             <el-table-column prop="username" label="用户名" width="120"></el-table-column>
-            
-            <el-table-column prop="borrowDevice" label="借用设备" min-width="180"></el-table-column>
-            
-            <el-table-column prop="returned" label="是否归还" width="100" align="center">
+            <el-table-column prop="role" label="角色" width="100" align="center">
               <template slot-scope="scope">
-                <el-tag :type="scope.row.returned === '是' ? 'success' : 'warning'" class="borrow-tag">
-                  {{ scope.row.returned }}
+                <el-tag :type="scope.row.role === 'ADMIN' ? 'danger' : 'success'" class="borrow-tag">
+                  {{ scope.row.role === 'ADMIN' ? '管理员' : '普通用户' }}
                 </el-tag>
               </template>
             </el-table-column>
-
-            <el-table-column prop="returnDate" label="归还时间" width="150" align="center">
+            <el-table-column prop="email" label="邮箱" min-width="180"></el-table-column>
+            <el-table-column prop="phone" label="手机号" width="140"></el-table-column>
+            <el-table-column prop="status" label="状态" width="100" align="center">
               <template slot-scope="scope">
-                {{ scope.row.returned === '是' ? scope.row.returnDate : '-' }}
+                <el-tag :type="scope.row.status === 'ACTIVE' ? 'success' : 'warning'" class="borrow-tag">
+                  {{ scope.row.status === 'ACTIVE' ? '正常' : '禁用' }}
+                </el-tag>
               </template>
             </el-table-column>
             
@@ -72,7 +73,7 @@
               background
               layout="prev, pager, next, jumper, total"
               :page-size="pageSize"
-              :total="filteredUsers.length"
+              :total="totalElements"
               :current-page.sync="currentPage"
               @current-change="handlePageChange"
               class="styled-pagination"
@@ -91,27 +92,25 @@
 
             <el-form-item label="用户名" required>
               <el-input v-model="addForm.username" placeholder="请输入用户名" />
-            </el-form-item> 
-
-            <el-form-item label="借用设备">
-              <el-input v-model="addForm.borrowDevice" placeholder="请输入借用设备名称" />
             </el-form-item>
-            
-            <el-form-item label="是否归还" required>
-              <el-select v-model="addForm.returned" placeholder="请选择" style="width: 100%">
-                <el-option label="是" value="是" />
-                <el-option label="否" value="否" />
+
+            <el-form-item label="密码" required>
+              <el-input v-model="addForm.password" type="password" placeholder="请输入密码" />
+            </el-form-item>
+
+            <el-form-item label="角色">
+              <el-select v-model="addForm.role" placeholder="请选择角色" style="width: 100%">
+                <el-option label="普通用户" value="USER" />
+                <el-option label="管理员" value="ADMIN" />
               </el-select>
             </el-form-item>
+
+            <el-form-item label="邮箱">
+              <el-input v-model="addForm.email" placeholder="请输入邮箱" />
+            </el-form-item>
             
-            <el-form-item label="归还时间" v-if="addForm.returned === '是'">
-              <el-date-picker 
-                v-model="addForm.returnDate" 
-                type="date" 
-                placeholder="选择归还时间" 
-                style="width: 100%"
-                value-format="yyyy-MM-dd"
-              />
+            <el-form-item label="手机号">
+              <el-input v-model="addForm.phone" placeholder="请输入手机号" />
             </el-form-item>
             
             <el-form-item class="submit-button-item">
@@ -138,25 +137,21 @@
       <el-form :model="editForm" label-width="100px">
         <el-form-item label="工号"><el-input v-model="editForm.staffId" disabled /></el-form-item>
         <el-form-item label="用户名"><el-input v-model="editForm.username" /></el-form-item>
-        <el-form-item label="借用设备"><el-input v-model="editForm.borrowDevice" /></el-form-item>
-        
-        <el-form-item label="是否归还">
-          <el-select v-model="editForm.returned" placeholder="请选择" style="width: 100%;">
-            <el-option label="是" value="是" />
-            <el-option label="否" value="否" />
+        <el-form-item label="新密码"><el-input v-model="editForm.password" type="password" placeholder="不修改请留空" /></el-form-item>
+        <el-form-item label="角色">
+          <el-select v-model="editForm.role" placeholder="请选择角色" style="width: 100%;">
+            <el-option label="普通用户" value="USER" />
+            <el-option label="管理员" value="ADMIN" />
           </el-select>
         </el-form-item>
-
-        <el-form-item label="归还时间" v-if="editForm.returned === '是'">
-          <el-date-picker 
-            v-model="editForm.returnDate" 
-            type="date" 
-            placeholder="选择归还时间" 
-            value-format="yyyy-MM-dd" 
-            style="width: 100%"
-          />
+        <el-form-item label="状态">
+          <el-select v-model="editForm.status" placeholder="请选择状态" style="width: 100%;">
+            <el-option label="正常" value="ACTIVE" />
+            <el-option label="禁用" value="LOCKED" />
+          </el-select>
         </el-form-item>
-        
+        <el-form-item label="邮箱"><el-input v-model="editForm.email" /></el-form-item>
+        <el-form-item label="手机号"><el-input v-model="editForm.phone" /></el-form-item>
       </el-form>
 
       <div slot="footer" class="dialog-footer">
@@ -169,6 +164,8 @@
 </template>
 
 <script>
+import { userApi } from '@/api/services';
+
 export default {
   name: "UserList",
   data() {
@@ -176,36 +173,25 @@ export default {
       search: "",
       pageSize: 10,
       currentPage: 1,
+      totalElements: 0,
       editDialogVisible: false,
       addDialogVisible: false,
       editForm: {},
       addForm: {
         staffId: "",
         username: "",
-        borrowDevice: "",
-        returned: "否",
-        returnDate: ""
+        password: "",
+        role: "USER",
+        email: "",
+        phone: ""
       },
-      // 模拟数据结构，只保留核心字段
-      users: [
-        { staffId: "E001", username: "张三", borrowDevice: "温度传感器", returned: "是", returnDate: "2024-06-05" },
-        { staffId: "E002", username: "李四", borrowDevice: "压力测试仪", returned: "否", returnDate: "" },
-        { staffId: "E003", username: "王五", borrowDevice: "摄像头模块", returned: "是", returnDate: "2024-01-12" },
-        { staffId: "E004", username: "赵六", borrowDevice: "", returned: "否", returnDate: "" },
-        { staffId: "E005", username: "孙七", borrowDevice: "环境监测仪", returned: "否", returnDate: "" },
-        { staffId: "E006", username: "周八", borrowDevice: "", returned: "是", returnDate: "2024-05-22" },
-        { staffId: "E007", username: "吴九", borrowDevice: "电压表", returned: "是", returnDate: "2024-02-10" },
-        { staffId: "E008", username: "郑十", borrowDevice: "", returned: "否", returnDate: "" },
-        { staffId: "E009", username: "冯十一", borrowDevice: "风速检测仪", returned: "是", returnDate: "2024-06-01" },
-        { staffId: "E010", username: "陈十二", borrowDevice: "", returned: "否", returnDate: "" },
-        { staffId: "E011", username: "卫十三", borrowDevice: "网络交换机", returned: "是", returnDate: "2024-06-15" }
-      ]
+      users: [],
+      loading: false
     };
   },
   computed: {
     filteredUsers() {
       if (!this.search) return this.users;
-      // 搜索工号或用户名
       const lowerSearch = this.search.toLowerCase();
       return this.users.filter(u => 
         (u.username && u.username.toLowerCase().includes(lowerSearch)) || 
@@ -213,74 +199,109 @@ export default {
       );
     }
   },
+  mounted() {
+    this.fetchUsers();
+  },
   methods: {
+    async fetchUsers() {
+      this.loading = true;
+      try {
+        const response = await userApi.getAll({
+          search: this.search || undefined,
+          page: this.currentPage - 1,
+          size: this.pageSize
+        });
+        const data = response.data;
+        this.users = data.content.map(user => ({
+          id: user.id,
+          staffId: user.staffId,
+          username: user.username,
+          role: user.role,
+          status: user.status,
+          email: user.email || '',
+          phone: user.phone || '',
+          createdAt: user.createdAt
+        }));
+        this.totalElements = data.totalElements;
+      } catch (error) {
+        console.error('Failed to fetch users:', error);
+        this.$message.error('获取用户列表失败');
+      } finally {
+        this.loading = false;
+      }
+    },
     handleSearch() {
       this.currentPage = 1;
+      this.fetchUsers();
     },
     handleEdit(row) {
-      this.editForm = { ...row };
-      // 检查并转换日期格式
-      if (this.editForm.returnDate && !(this.editForm.returnDate instanceof Date)) {
-          this.editForm.returnDate = new Date(this.editForm.returnDate);
-      }
+      this.editForm = { ...row, password: '' };
       this.editDialogVisible = true;
     },
-    submitEdit() {
-      // 格式化日期和处理未归还情况
-      if (this.editForm.returned === '是' && this.editForm.returnDate) {
-          if (this.editForm.returnDate instanceof Date) {
-              const d = this.editForm.returnDate;
-              this.editForm.returnDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-          }
-      } else {
-          this.editForm.returnDate = "";
-          this.editForm.borrowDevice = ""; // 如果设置为已归还，清空借用设备信息
+    async submitEdit() {
+      try {
+        const updateData = {
+          staffId: this.editForm.staffId,
+          username: this.editForm.username,
+          role: this.editForm.role,
+          status: this.editForm.status,
+          email: this.editForm.email,
+          phone: this.editForm.phone
+        };
+        if (this.editForm.password) {
+          updateData.password = this.editForm.password;
+        }
+        await userApi.update(this.editForm.id, updateData);
+        this.$message.success("用户信息修改成功！");
+        this.editDialogVisible = false;
+        this.fetchUsers();
+      } catch (error) {
+        console.error('Failed to update user:', error);
+        this.$message.error('修改失败：' + (error.response?.data?.message || error.message));
       }
-
-      const index = this.users.findIndex(u => u.staffId === this.editForm.staffId);
-      if (index !== -1) {
-          this.users.splice(index, 1, { ...this.editForm });
-      }
-      this.$message.success("用户信息修改成功！");
-      this.editDialogVisible = false;
     },
     handleDelete(row) {
       this.$confirm(`确定删除用户【${row.username} - ${row.staffId}】吗？`, "提示", {
         confirmButtonText: "确定",
         cancelButtonText: "取消",
         type: "warning"
-      }).then(() => {
-        this.users = this.users.filter(u => u.staffId !== row.staffId);
-        this.$message.success("删除成功");
+      }).then(async () => {
+        try {
+          await userApi.delete(row.id);
+          this.$message.success("删除成功");
+          this.fetchUsers();
+        } catch (error) {
+          console.error('Failed to delete user:', error);
+          this.$message.error('删除失败：' + (error.response?.data?.message || error.message));
+        }
       }).catch(() => {});
     },
     handlePageChange(page) {
       this.currentPage = page;
+      this.fetchUsers();
     },
-    submitAdd() {
-      if (!this.addForm.staffId || !this.addForm.username) {
-          this.$message.error("工号和用户名为必填项！");
-          return;
-      }
-      if (this.users.some(u => u.staffId === this.addForm.staffId)) {
-          this.$message.error("工号已存在，请重新输入！");
+    async submitAdd() {
+      if (!this.addForm.staffId || !this.addForm.username || !this.addForm.password) {
+          this.$message.error("工号、用户名和密码为必填项！");
           return;
       }
 
-      // 处理归还日期
-      if (this.addForm.returned === '否') {
-          this.addForm.returnDate = "";
-      } else if (this.addForm.returned === '是' && this.addForm.returnDate instanceof Date) {
-          const d = this.addForm.returnDate;
-          this.addForm.returnDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      try {
+        await userApi.create({
+          staffId: this.addForm.staffId,
+          username: this.addForm.username,
+          password: this.addForm.password,
+          role: this.addForm.role || 'USER',
+          email: this.addForm.email,
+          phone: this.addForm.phone
+        });
+        this.$message.success("用户添加成功！");
+        this.addForm = { staffId: "", username: "", password: "", role: "USER", email: "", phone: "" };
+        this.fetchUsers();
+      } catch (error) {
+        console.error('Failed to create user:', error);
+        this.$message.error('添加失败：' + (error.response?.data?.message || error.message));
       }
-      
-      this.users.push({ ...this.addForm });
-      this.$message.success("用户添加成功！");
-      this.addDialogVisible = false;
-      // 重置表单
-      this.addForm = { staffId: "", username: "", borrowDevice: "", returned: "否", returnDate: "" };
-      this.currentPage = Math.ceil(this.filteredUsers.length / this.pageSize);
     }
   }
 };
