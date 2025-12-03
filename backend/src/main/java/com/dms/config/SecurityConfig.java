@@ -2,6 +2,7 @@ package com.dms.config;
 
 import com.dms.repository.UserRepository;
 import com.dms.security.JwtAuthenticationFilter;
+import com.dms.security.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -34,9 +35,9 @@ import java.util.List;
 @RequiredArgsConstructor
 public class SecurityConfig {
     
-    private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final UserRepository userRepository;
-    
+    private final JwtTokenProvider jwtTokenProvider;
+
     @Bean
     public UserDetailsService userDetailsService() {
         return username -> userRepository.findByStaffId(username)
@@ -63,6 +64,8 @@ public class SecurityConfig {
     
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        JwtAuthenticationFilter jwtAuthenticationFilter = new JwtAuthenticationFilter(jwtTokenProvider, userDetailsService());
+
         http
             .csrf(AbstractHttpConfigurer::disable)
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
