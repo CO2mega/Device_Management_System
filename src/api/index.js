@@ -36,8 +36,8 @@ api.interceptors.response.use(
         localStorage.removeItem('user');
         window.location.href = '/';
       }
-      // Handle other errors
-      const message = error.response.data?.message || '请求失败';
+      // Handle other errors - use server message or fallback
+      const message = error.response.data?.message || error.message || 'Request failed';
       console.error('API Error:', message);
     }
     return Promise.reject(error);
