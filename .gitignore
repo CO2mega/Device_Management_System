@@ -2,6 +2,11 @@
 node_modules
 /dist
 
+# Maven
+backend/target/
+*.jar
+*.war
+
 
 # local env files
 .env.local
