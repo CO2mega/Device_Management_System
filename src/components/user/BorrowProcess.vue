@@ -78,13 +78,11 @@ export default {
         const response = await deviceApi.getAll({ size: 100, isLoaned: false });
         const data = response.data;
         
-        this.devices = data.content
-          .filter(device => !device.isLoaned)
-          .map(device => ({
-            id: device.id,
-            name: device.name,
-            status: device.status || '正常'
-          }));
+        this.devices = data.content.map(device => ({
+          id: device.id,
+          name: device.name,
+          status: device.status || '正常'
+        }));
       } catch (error) {
         console.error('Failed to fetch devices:', error);
         this.$message.error('获取设备列表失败');

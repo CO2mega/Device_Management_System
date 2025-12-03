@@ -157,12 +157,11 @@ export default {
     async fetchRecentRecords() {
       this.loading = true;
       try {
-        const response = await loanApi.getAll({ size: 5 });
+        const response = await loanApi.getAll({ size: 3 });
         const data = response.data;
         
         this.recentRecords = data.content
           .filter(record => record.approvalStatus === 'APPROVED')
-          .slice(0, 3)
           .map(record => ({
             id: record.id,
             device: record.deviceName,
