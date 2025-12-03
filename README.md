@@ -100,4 +100,4 @@ Backend configuration in `backend/src/main/resources/application.properties`
 
 ## License
 
-MIT
+WTFPL
