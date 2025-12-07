@@ -8,10 +8,8 @@
       placeholder="搜索设备名称"
       clearable
       style="width: 300px; margin-bottom: 20px;"
+      prefix-icon="el-icon-search"
     >
-      <template #prefix>
-        <i class="el-icon-search"></i>
-      </template>
     </el-input>
 
 <el-table
@@ -76,7 +74,8 @@ export default {
   computed: {
     filteredRecords() {
       if (!this.searchQuery) return this.records;
-      return this.records.filter(r => r.device.includes(this.searchQuery));
+      const q = this.searchQuery.toLowerCase();
+      return this.records.filter(r => (r.device||'').toLowerCase().includes(q));
     }
   },
   mounted() {
@@ -86,19 +85,49 @@ export default {
     async fetchRecords() {
       this.loading = true;
       try {
-        // Get loans for the current user
         const response = await loanApi.getAll({ size: 100 });
         const data = response.data;
-        
-        this.records = data.content
-          .filter(record => record.approvalStatus === 'APPROVED')
+        if (!data) {
+          this.records = [];
+          return;
+        }
+
+        // determine items array (support Page or raw array)
+        const items = Array.isArray(data) ? data : (data.content || []);
+
+        // get current logged-in user from localStorage
+        let currentUser = null;
+        try {
+          currentUser = JSON.parse(localStorage.getItem('user')) || null;
+        } catch (e) {
+          currentUser = null;
+        }
+
+        // If we have a currentUser, filter items to only those belonging to them
+        const userFiltered = items.filter(record => {
+          if (!record) return false;
+          // backend loan record might contain applicant or applicantId
+          const applicant = record.applicant || record.applicantUser || null;
+          if (currentUser) {
+            if (applicant && (applicant.id === currentUser.id || applicant.staffId === currentUser.staffId)) return true;
+            // fallback: some APIs include applicantId or applicantStaffId at top level
+            if (record.applicantId && currentUser.id && record.applicantId === currentUser.id) return true;
+            if (record.applicantStaffId && currentUser.staffId && record.applicantStaffId === currentUser.staffId) return true;
+            return false;
+          }
+          // if no current user info available, be conservative and return none
+          return false;
+        });
+
+        this.records = userFiltered
+          .filter(record => record.approvalStatus === 'APPROVED' || record.approvalStatus === 'APPROVED' /* keep same */)
           .map(record => ({
             id: record.id,
-            device: record.deviceName,
-            borrowDate: record.applyDate ? record.applyDate.substring(0, 10) : '',
-            returnDate: record.actualReturnDate ? record.actualReturnDate.substring(0, 10) : '',
+            device: record.deviceName || (record.device && record.device.name) || '',
+            borrowDate: record.applyDate ? (record.applyDate.substring ? record.applyDate.substring(0,10) : record.applyDate) : '',
+            returnDate: record.actualReturnDate ? (record.actualReturnDate.substring ? record.actualReturnDate.substring(0,10) : record.actualReturnDate) : '',
             status: this.mapStatus(record),
-            image: this.getDeviceImage(record.deviceName)
+            image: this.getDeviceImage(record.deviceName || (record.device && record.device.name) || '')
           }));
       } catch (error) {
         console.error('Failed to fetch records:', error);
@@ -126,7 +155,11 @@ export default {
         '电压表': require('@/assets/OIP-C (3).webp'),
         '光学传感器': require('@/assets/OIP-C (4).webp')
       };
-      return imageMap[deviceName] || require('@/assets/OIP-C.webp');
+      try {
+        return imageMap[deviceName] || require('@/assets/OIP-C.webp');
+      } catch (e) {
+        return '';
+      }
     },
     async returnDevice(row) {
       try {

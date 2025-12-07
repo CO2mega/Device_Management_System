@@ -3,18 +3,6 @@
     
     <div class="top-header-controls">
       <h2 class="page-title">设备列表</h2>
-      <div class="actions-group">
-        <el-input
-          v-model="search"
-          placeholder="请输入设备名称搜索"
-          clearable
-          class="search-box-styled"
-          prefix-icon="el-icon-search"
-          @input="handleSearch"
-        >
-          <i slot="prefix" class="el-input__icon el-icon-search search-icon-prefix"></i>
-        </el-input>
-      </div>
     </div>
     
     <el-row :gutter="20" class="content-split-area">
@@ -22,44 +10,45 @@
       <el-col :span="17" class="table-content-block">
           
           <el-table
-            :data="filteredDevices.slice((currentPage-1)*pageSize, currentPage*pageSize)"
-            border
-            style="width: 100%;"
-            class="styled-table glass-table"
-          >
+            :data="devices"
+            :key="tableKey"
+             border
+             style="width: 100%;"
+             class="styled-table glass-table"
+           >
             <el-table-column prop="id" label="设备编号" width="100"></el-table-column>
             <el-table-column prop="name" label="设备名称" min-width="150"></el-table-column>
             <el-table-column prop="location" label="存放位置" min-width="150"></el-table-column>
             
             <el-table-column prop="borrowed" label="是否借出" width="120" align="center">
-              <template slot-scope="scope">
-                <el-tag :type="scope.row.borrowed === '否' ? 'success' : 'warning'" class="borrow-tag">
-                  {{ scope.row.borrowed === '是' ? '是' : '否' }}
+              <template #default="{ row }">
+                <el-tag :type="row.borrowed === '否' ? 'success' : 'warning'" class="borrow-tag">
+                  {{ row.borrowed === '是' ? '是' : '否' }}
                 </el-tag>
               </template>
             </el-table-column>
 
             <el-table-column prop="borrowDate" label="借出日期" width="140" align="center">
-              <template slot-scope="scope">
-                {{ scope.row.borrowed === '是' ? scope.row.borrowDate : '-' }}
+              <template #default="{ row }">
+                {{ row.borrowed === '是' ? row.borrowDate : '-' }}
               </template>
             </el-table-column>
 
             <el-table-column prop="purchaseDate" label="购入日期" width="140"></el-table-column>
             
             <el-table-column label="操作" align="center" width="160">
-              <template slot-scope="scope">
-                <el-button 
-                  size="mini" 
-                  class="edit-button-styled" 
-                  @click="handleEdit(scope.row)"
+              <template #default="{ row }">
+                <el-button
+                  size="mini"
+                  class="edit-button-styled"
+                  @click="handleEdit(row)"
                 >
                   编辑
                 </el-button>
-                <el-button 
-                  size="mini" 
-                  class="delete-button-styled" 
-                  @click="handleDelete(scope.row)"
+                <el-button
+                  size="mini"
+                  class="delete-button-styled"
+                  @click="handleDelete(row)"
                 >
                   删除
                 </el-button>
@@ -72,11 +61,11 @@
               background
               layout="prev, pager, next, jumper, total"
               :page-size="pageSize"
-              :total="filteredDevices.length"
-              :current-page.sync="currentPage"
-              @current-change="handlePageChange"
-              class="styled-pagination"
-            />
+              :total="totalElements"
+               :current-page.sync="currentPage"
+               @current-change="handlePageChange"
+               class="styled-pagination"
+             />
           </div>
       </el-col>
       
@@ -197,7 +186,6 @@ export default {
   name: "DeviceList",
   data() {
     return {
-      search: "",
       pageSize: 10,
       currentPage: 1,
       totalElements: 0,
@@ -205,49 +193,80 @@ export default {
       editForm: {},
       addForm: { name: "", type: "", status: "正常", borrowed: "否", location: "", purchaseDate: "", borrowDate: "" },
       devices: [],
+      tableKey: 0,
       loading: false
     };
   },
   computed: {
-    filteredDevices() {
-      if (!this.search) return this.devices;
-      return this.devices.filter(d => d.name.includes(this.search));
-    }
   },
   mounted() {
     this.fetchDevices();
   },
   methods: {
-    async fetchDevices() {
+    async fetchDevices(retry = true) {
       this.loading = true;
       try {
-        const response = await deviceApi.getAll({
-          search: this.search || undefined,
+        const params = {
           page: this.currentPage - 1,
           size: this.pageSize
-        });
+        };
+        console.debug('fetchDevices request params:', params);
+        const response = await deviceApi.getAll(params);
         const data = response.data;
-        this.devices = data.content.map(device => ({
-          id: device.id,
-          name: device.name,
-          type: device.type || '',
-          status: device.status || '正常',
-          borrowed: device.isLoaned ? '是' : '否',
-          location: device.location || '',
-          purchaseDate: device.purchaseDate || '',
-          borrowDate: device.loanDate || ''
-        }));
-        this.totalElements = data.totalElements;
+        console.debug('fetchDevices response:', data);
+
+        // support Page or raw array
+        const items = Array.isArray(data) ? data : (data && data.content ? data.content : []);
+        const totalReported = (data && typeof data.totalElements !== 'undefined') ? data.totalElements : (Array.isArray(data) ? data.length : 0);
+        const lastPage = Math.max(1, Math.ceil(totalReported / this.pageSize));
+
+        if ((!items || items.length === 0) && totalReported > 0 && retry) {
+          // server reports there are items but returned empty page -> try to correct page
+          // if current page > lastPage, set to lastPage; otherwise try first page as fallback
+          this.currentPage = this.currentPage > lastPage ? lastPage : 1;
+          await this.fetchDevices(false);
+        }
+
+        if (!items || items.length === 0) {
+          this.devices = [];
+          this.totalElements = totalReported;
+          // inform user if there are no items at all
+          if (totalReported === 0) {
+            // no items
+          } else {
+            // no items for this page after retrying
+            this.$message.warning('当前页暂无数据，已自动调整分页。');
+          }
+        } else {
+          this.devices = items.map(device => ({
+           id: device.id,
+           name: device.name,
+           type: device.type || '',
+           status: device.status || '正常',
+           borrowed: device.isLoaned ? '是' : '否',
+           location: device.location || '',
+           purchaseDate: device.purchaseDate || '',
+           borrowDate: device.loanDate || ''
+         }));
+
+          this.totalElements = totalReported;
+        }
+
+        // force table rerender to avoid layout glitches
+        this.tableKey += 1;
+
+        // fix page if out of range
+        const last = Math.max(1, Math.ceil(this.totalElements / this.pageSize));
+        if (this.currentPage > last && retry) {
+          this.currentPage = last;
+          await this.fetchDevices(false);
+        }
       } catch (error) {
         console.error('Failed to fetch devices:', error);
         this.$message.error('获取设备列表失败');
       } finally {
         this.loading = false;
       }
-    },
-    handleSearch() {
-      this.currentPage = 1;
-      this.fetchDevices();
     },
     handleEdit(row) {
       this.editForm = { ...row };
@@ -292,8 +311,9 @@ export default {
       }).catch(() => {});
     },
     handlePageChange(page) {
-      this.currentPage = page;
-      this.fetchDevices();
+      console.debug('page changed to', page);
+       this.currentPage = page;
+       this.fetchDevices();
     },
     async submitAdd() {
       if (!this.addForm.name) {
@@ -357,6 +377,7 @@ export default {
     display: flex;
     flex-direction: column;
     padding: 0 !important; 
+    min-height: 320px; /* ensure table area doesn't collapse */
 }
 
 
@@ -370,6 +391,7 @@ export default {
     border: 1px solid rgba(122, 140, 255, 0.12);
     box-shadow: 0 8px 30px rgba(122, 140, 255, 0.06);
     flex-grow: 1;
+    min-height: 220px; /* give table area a minimum height */
 }
 
 .styled-table /deep/ .el-table__header-wrapper th {
@@ -459,15 +481,6 @@ export default {
   font-size: 22px;
   color: var(--deep-blue);
   margin: 0;
-}
-.search-box-styled {
-    width: 250px;
-}
-.search-box-styled /deep/ .el-input__inner {
-    border-radius: 18px;
-    height: 40px;
-    background: rgba(255,255,255,0.9);
-    border: 1px solid rgba(0,192,255,0.14);
 }
 
 /* 编辑按钮 - 柔和紫作为主操作色 */

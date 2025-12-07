@@ -10,8 +10,6 @@
       <el-step title="归还设备"></el-step>
     </el-steps>
 
-    <el-button type="primary" @click="nextStep">下一步</el-button>
-
     <!-- ✅ 借用申请表 -->
     <el-card class="borrow-form" style="margin-top: 30px;" v-loading="loading">
       <h3>借用申请</h3>
@@ -90,10 +88,6 @@ export default {
         this.loading = false;
       }
     },
-    nextStep() {
-      if (this.activeStep < 3) this.activeStep++;
-      else this.$message.success("流程已完成");
-    },
     async submitForm() {
       if (!this.form.deviceId || !this.form.startDate || !this.form.endDate) {
         this.$message.error("请完整填写申请信息");
@@ -101,11 +95,16 @@ export default {
       }
       
       try {
-        await loanApi.apply({
+        // build payload and omit optional 'purpose' when empty
+        const payload = {
           deviceId: this.form.deviceId,
-          expectedReturnDate: this.form.endDate,
-          purpose: this.form.remark
-        });
+          expectedReturnDate: this.form.endDate
+        };
+        if (this.form.remark && this.form.remark.trim().length > 0) {
+          payload.purpose = this.form.remark;
+        }
+
+        await loanApi.apply(payload);
         this.$message.success(`已提交借用申请，等待管理员审批`);
         this.resetForm();
         this.activeStep = 1; // Move to approval step

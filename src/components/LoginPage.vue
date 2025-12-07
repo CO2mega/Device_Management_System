@@ -110,6 +110,8 @@
 </template>
 
 <script>
+import { authApi } from '@/api/services';
+
 export default {
   name: "LoginPage",
   data() {
@@ -136,28 +138,66 @@ export default {
     },
 
     // 处理登录逻辑
-    handleLogin() {
-      // 模拟简单的验证逻辑
-      if (this.username === "111" && this.password === "111") {
-        this.$router.push("/user-home"); // 跳转路由
-        alert("登录成功，欢迎用户！");
-      } else if (this.username === "222" && this.password === "222") {
-        this.$router.push("/menu/dashboard");
-        alert("登录成功，欢迎管理员！");
-      } else {
-        alert("账号或密码错误！");
+    async handleLogin() {
+      // Call backend login API
+      if (!this.username || !this.password) {
+        alert('请输入用户名和密码');
+        return;
+      }
+
+      try {
+        const response = await authApi.login({ staffId: this.username, password: this.password });
+        const data = response.data;
+        const token = data?.token;
+        const user = data?.user;
+        if (token) {
+          localStorage.setItem('token', token);
+        }
+        if (user) {
+          localStorage.setItem('user', JSON.stringify(user));
+        }
+
+        // Redirect based on role if available
+        const role = user?.role || 'USER';
+        if (role === 'ADMIN' || role === 'ROLE_ADMIN') {
+          this.$router.push('/menu/dashboard');
+        } else {
+          this.$router.push('/user-home');
+        }
+
+        alert('登录成功');
+      } catch (err) {
+        // Provide better error feedback
+        const msg = err?.response?.data?.message || err.message || '登录失败';
+        alert(msg);
       }
     },
 
     // 处理注册逻辑
-    handleRegister() {
+    async handleRegister() {
       if (!this.registerUsername || !this.registerEmail || !this.registerPassword) {
         alert("请完整填写注册信息");
         return;
       }
-      alert(`注册成功，欢迎 ${this.registerUsername}！`);
-      // 注册成功后自动切回登录界面
-      this.isRegisterMode = false;
+
+      try {
+        // Use registerUsername as staffId when not provided explicitly
+        const registerPayload = {
+          staffId: this.registerUsername,
+          username: this.registerUsername,
+          password: this.registerPassword,
+          email: this.registerEmail,
+          phone: ''
+        };
+
+        await authApi.register(registerPayload);
+        alert(`注册成功，欢迎 ${this.registerUsername}！`);
+        // 注册成功后自动切回登录界面
+        this.isRegisterMode = false;
+      } catch (err) {
+        const msg = err?.response?.data?.message || err.message || '注册失败';
+        alert(msg);
+      }
     },
 
     // 处理忘记密码逻辑
@@ -291,7 +331,7 @@ export default {
 
 /* 当父级有 .active 类时 (即点击了注册) */
 .login-section.active .form-box.login {
-  transform: translateX(430px); /* 移出右侧视野 */
+  transform: translateX(430px); /* 秼出右侧视野 */
   transition-delay: 0s; /* 立即移走 */
   pointer-events: none;
 }

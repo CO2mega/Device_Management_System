@@ -51,20 +51,20 @@
             <el-table-column prop="expectedReturnDate" label="预计归还" width="140"></el-table-column>
             
             <el-table-column prop="status" label="状态" width="100" align="center">
-              <template slot-scope="scope">
-                <el-tag :type="getStatusTagType(scope.row.status)" class="status-tag">
-                  {{ scope.row.status }}
+              <template #default="{ row }">
+                <el-tag :type="getStatusTagType(row.status)" class="status-tag">
+                  {{ row.status }}
                 </el-tag>
               </template>
             </el-table-column>
 
             <el-table-column label="操作" align="center" width="100">
-              <template slot-scope="scope">
-                <el-button 
+              <template #default="{ row }">
+                <el-button
                   size="mini" 
                   type="text" 
                   class="edit-button-styled" 
-                  @click="viewDetails(scope.row)"
+                  @click="viewDetails(row)"
                 >
                   查看
                 </el-button>
@@ -125,8 +125,9 @@
     <el-dialog
       title="申请详情"
       :visible.sync="detailDialogVisible"
+      append-to-body
       width="500px"
-      class="styled-dialog"
+      class="styled-dialog borrow-detail-dialog"
     >
       <el-descriptions :column="1" border>
         <el-descriptions-item label="流水号">{{ currentDetail.id }}</el-descriptions-item>
@@ -176,22 +177,19 @@ export default {
     };
   },
   computed: {
-    // 待处理申请 (用于卡片显示)
     pendingApplications() {
       return this.allRecords.filter(r => r.status === '待处理').slice(0, 5);
     },
     filteredRecords() {
       let records = this.allRecords;
-      const lowerSearch = this.search.toLowerCase();
-      
+      const lowerSearch = (this.search || '').toLowerCase();
       if (lowerSearch) {
-        records = records.filter(r => 
-          String(r.id).includes(lowerSearch) || 
-          r.deviceName.toLowerCase().includes(lowerSearch) || 
-          r.applicant.toLowerCase().includes(lowerSearch)
+        records = records.filter(r =>
+          String(r.id).includes(lowerSearch) ||
+          (r.deviceName || '').toLowerCase().includes(lowerSearch) ||
+          (r.applicant || '').toLowerCase().includes(lowerSearch)
         );
       }
-
       return records;
     },
     pagedRecords() {
@@ -214,9 +212,9 @@ export default {
       this.loading = true;
       try {
         const response = await loanApi.getAll({ size: 100 });
-        const data = response.data;
-        
-        this.allRecords = data.content.map(record => ({
+        const data = response.data || {};
+        const content = Array.isArray(data.content) ? data.content : (Array.isArray(data) ? data : []);
+        this.allRecords = content.map(record => ({
           id: record.id,
           deviceName: record.deviceName,
           applicant: record.applicantName,
@@ -238,7 +236,7 @@ export default {
         case 'PENDING': return '待处理';
         case 'APPROVED': return '已批准';
         case 'REJECTED': return '已驳回';
-        default: return status;
+        default: return status || '';
       }
     },
     handleSearch() {
@@ -260,42 +258,132 @@ export default {
       this.detailDialogVisible = true;
     },
     async handleApprove(app) {
-      this.$confirm(`确定批准 ${app.applicant} 借用 ${app.deviceName} 吗？`, "批准申请", {
-        confirmButtonText: "确定批准",
-        cancelButtonText: "取消",
-        type: "success"
-      }).then(async () => {
-        try {
-          await loanApi.approve(app.id);
-          this.$message.success("申请已批准并记录！");
-          this.detailDialogVisible = false;
-          this.fetchLoanRecords();
-        } catch (error) {
+      try {
+        await this.$confirm(`确定批准 ${app.applicant} 借用 ${app.deviceName} 吗？`, "批准申请", {
+          confirmButtonText: "确定批准",
+          cancelButtonText: "取消",
+          type: "success"
+        });
+        await loanApi.approve(app.id);
+        this.$message.success("申请已批准并记录！");
+        this.detailDialogVisible = false;
+        this.fetchLoanRecords();
+      } catch (error) {
+        // cancel or failure
+        if (error && error !== true) {
           console.error('Failed to approve loan:', error);
           this.$message.error('批准失败：' + (error.response?.data?.message || error.message));
         }
-      }).catch(() => {});
+      }
     },
     async handleReject(app) {
-      this.$confirm(`确定驳回 ${app.applicant} 借用 ${app.deviceName} 的申请吗？`, "驳回申请", {
-        confirmButtonText: "确定驳回",
-        cancelButtonText: "取消",
-        type: "warning"
-      }).then(async () => {
-        try {
-          await loanApi.reject(app.id, '申请被驳回');
-          this.$message.warning("申请已驳回。");
-          this.detailDialogVisible = false;
-          this.fetchLoanRecords();
-        } catch (error) {
+      try {
+        await this.$confirm(`确定驳回 ${app.applicant} 借用 ${app.deviceName} 的申请吗？`, "驳回申请", {
+          confirmButtonText: "确定驳回",
+          cancelButtonText: "取消",
+          type: "warning"
+        });
+        await loanApi.reject(app.id, '申请被驳回');
+        this.$message.warning("申请已驳回。");
+        this.detailDialogVisible = false;
+        this.fetchLoanRecords();
+      } catch (error) {
+        if (error && error !== true) {
           console.error('Failed to reject loan:', error);
           this.$message.error('驳回失败：' + (error.response?.data?.message || error.message));
         }
-      }).catch(() => {});
+      }
+    },
+    createFrostOverlay() {
+      try {
+        this.removeFrostOverlay();
+        const overlay = document.createElement('div');
+        overlay.className = 'borrow-frost-overlay';
+        overlay.setAttribute('data-injected', 'true');
+        // Try to place the overlay directly beneath the active dialog wrapper so it doesn't cover the dialog
+        const dialogEl = document.querySelector('.borrow-detail-dialog');
+        if (dialogEl) {
+          const wrapper = dialogEl.closest('.el-dialog__wrapper');
+          if (wrapper && wrapper.parentNode) {
+            wrapper.parentNode.insertBefore(overlay, wrapper);
+            const dialogZ = window.getComputedStyle(dialogEl).zIndex;
+            const z = Number(dialogZ) || 3100;
+            overlay.style.zIndex = String(Math.max(0, z - 10));
+          } else {
+            document.body.appendChild(overlay);
+          }
+        } else {
+          document.body.appendChild(overlay);
+        }
+      } catch (e) {
+        // ignore
+      }
+    },
+    removeFrostOverlay() {
+      try {
+        const els = Array.from(document.querySelectorAll('.borrow-frost-overlay[data-injected="true"]'));
+        els.forEach(e => e.remove());
+      } catch (e) {
+        // ignore
+      }
     }
+  },
+  watch: {
+    detailDialogVisible(val) {
+      if (val) {
+        try {
+          const masks = Array.from(document.querySelectorAll('.v-modal'));
+          masks.forEach(m => m.remove());
+        } catch (e) {
+          console.debug('remove default masks failed', e);
+        }
+        this.createFrostOverlay();
+      } else {
+        this.removeFrostOverlay();
+        setTimeout(() => {
+          try {
+            const masks = Array.from(document.querySelectorAll('.v-modal'));
+            const dialogs = document.querySelectorAll('.el-dialog__wrapper');
+            if (!dialogs || dialogs.length === 0) masks.forEach(m => m.remove());
+          } catch (e) {
+            console.debug('cleanup masks failed', e);
+          }
+        }, 60);
+      }
+    }
+  },
+  beforeDestroy() {
+    this.removeFrostOverlay();
   }
 };
 </script>
+
+<style>
+/* global styles for dialog z-index override */
+/* Ensure the dialog appears above other overlays */
+.borrow-detail-dialog {
+  z-index: 3100 !important;
+}
+/* our custom frosted overlay (below dialog, above page content) */
+.borrow-frost-overlay {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(255,255,255,0.12);
+  backdrop-filter: blur(6px) saturate(120%);
+  -webkit-backdrop-filter: blur(6px) saturate(120%);
+  /* default z-index; when inserted before dialog, script will adjust if needed */
+  z-index: 3000 !important;
+  pointer-events: none; /* allow clicks to pass through except to the dialog */
+}
+/* ensure Element UI default modal mask doesn't block interaction or darken the page */
+.v-modal {
+  background: transparent !important;
+  pointer-events: none !important;
+}
+</style>
 
 <style scoped>
 /* -------------------- 页面基础布局 (保持不变) -------------------- */

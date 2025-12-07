@@ -29,16 +29,26 @@ public class JwtTokenProvider {
     
     public String generateToken(UserDetails userDetails) {
         Map<String, Object> claims = new HashMap<>();
-        claims.put("role", userDetails.getAuthorities().iterator().next().getAuthority());
-        return createToken(claims, userDetails.getUsername());
+        // include role if available
+        if (userDetails.getAuthorities() != null && userDetails.getAuthorities().iterator().hasNext()) {
+            claims.put("role", userDetails.getAuthorities().iterator().next().getAuthority());
+        }
+        // Set subject to staffId when available so UserDetailsService (which loads by staffId) can find the user during validation
+        String subject;
+        if (userDetails instanceof com.dms.entity.User) {
+            subject = ((com.dms.entity.User) userDetails).getStaffId();
+        } else {
+            subject = userDetails.getUsername();
+        }
+        return createToken(claims, subject);
     }
     
     private String createToken(Map<String, Object> claims, String subject) {
         return Jwts.builder()
-                .claims(claims)
-                .subject(subject)
-                .issuedAt(new Date())
-                .expiration(new Date(System.currentTimeMillis() + jwtExpiration))
+                .setClaims(claims)
+                .setSubject(subject)
+                .setIssuedAt(new Date())
+                .setExpiration(new Date(System.currentTimeMillis() + jwtExpiration))
                 .signWith(getSigningKey())
                 .compact();
     }
@@ -57,11 +67,12 @@ public class JwtTokenProvider {
     }
     
     private Claims extractAllClaims(String token) {
+        // Use parser().setSigningKey(...).build().parseClaimsJws(...) for compatibility with current jjwt version
         return Jwts.parser()
-                .verifyWith(getSigningKey())
+                .setSigningKey(getSigningKey())
                 .build()
-                .parseSignedClaims(token)
-                .getPayload();
+                .parseClaimsJws(token)
+                .getBody();
     }
     
     private Boolean isTokenExpired(String token) {
@@ -69,8 +80,17 @@ public class JwtTokenProvider {
     }
     
     public Boolean validateToken(String token, UserDetails userDetails) {
-        final String username = extractUsername(token);
-        return (username.equals(userDetails.getUsername()) && !isTokenExpired(token));
+        try {
+            final String subject = extractUsername(token);
+            if (userDetails instanceof com.dms.entity.User) {
+                String staffId = ((com.dms.entity.User) userDetails).getStaffId();
+                return (subject.equals(staffId) && !isTokenExpired(token));
+            } else {
+                return (subject.equals(userDetails.getUsername()) && !isTokenExpired(token));
+            }
+        } catch (JwtException | IllegalArgumentException e) {
+            return false;
+        }
     }
     
     public long getExpirationTime() {

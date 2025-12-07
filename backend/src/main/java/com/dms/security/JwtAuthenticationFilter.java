@@ -30,6 +30,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         final String username;
         
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            logger.debug("No JWT token found in request headers for URI: " + request.getRequestURI());
             filterChain.doFilter(request, response);
             return;
         }
@@ -50,11 +51,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     );
                     authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                     SecurityContextHolder.getContext().setAuthentication(authToken);
+                } else {
+                    logger.warn("JWT token validation failed for user: " + username + " on URI: " + request.getRequestURI());
                 }
             }
         } catch (Exception e) {
-            // Invalid token - do nothing, just proceed without authentication
-            logger.debug("JWT validation failed: " + e.getMessage());
+            // Invalid token - log at WARN so it's visible in default logs
+            String tokenPreview = jwt != null && jwt.length() > 10 ? jwt.substring(0,10) + "..." : jwt;
+            logger.warn("JWT validation failed (token start=" + tokenPreview + "): " + e.getMessage());
         }
         
         filterChain.doFilter(request, response);

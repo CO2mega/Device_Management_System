@@ -13,7 +13,6 @@
           prefix-icon="el-icon-search"
           @input="handleSearch"
         >
-          <i slot="prefix" class="el-input__icon el-icon-search search-icon-prefix"></i>
         </el-input>
       </div>
     </div>
@@ -23,7 +22,7 @@
       <el-col :span="17" class="table-content-block">
           
           <el-table
-            :data="filteredUsers.slice((currentPage-1)*pageSize, currentPage*pageSize)"
+            :data="users"
             border
             style="width: 100%;"
             class="styled-table glass-table"
@@ -189,21 +188,11 @@ export default {
       loading: false
     };
   },
-  computed: {
-    filteredUsers() {
-      if (!this.search) return this.users;
-      const lowerSearch = this.search.toLowerCase();
-      return this.users.filter(u => 
-        (u.username && u.username.toLowerCase().includes(lowerSearch)) || 
-        (u.staffId && u.staffId.toLowerCase().includes(lowerSearch))
-      );
-    }
-  },
   mounted() {
     this.fetchUsers();
   },
   methods: {
-    async fetchUsers() {
+    async fetchUsers(retry = true) {
       this.loading = true;
       try {
         const response = await userApi.getAll({
@@ -212,6 +201,17 @@ export default {
           size: this.pageSize
         });
         const data = response.data;
+        // Update total first so we can calculate valid page range
+        this.totalElements = data.totalElements || 0;
+
+        const lastPage = Math.max(1, Math.ceil(this.totalElements / this.pageSize));
+        if (this.currentPage > lastPage && retry) {
+          this.currentPage = lastPage;
+          // recall once with retry = false to avoid infinite loop
+          await this.fetchUsers(false);
+          return;
+        }
+
         this.users = data.content.map(user => ({
           id: user.id,
           staffId: user.staffId,
@@ -269,6 +269,7 @@ export default {
         try {
           await userApi.delete(row.id);
           this.$message.success("删除成功");
+          // if deletion causes current page to be empty, fetchUsers will correct it
           this.fetchUsers();
         } catch (error) {
           console.error('Failed to delete user:', error);
@@ -287,7 +288,7 @@ export default {
       }
 
       try {
-        await userApi.create({
+        const response = await userApi.create({
           staffId: this.addForm.staffId,
           username: this.addForm.username,
           password: this.addForm.password,
@@ -295,9 +296,32 @@ export default {
           email: this.addForm.email,
           phone: this.addForm.phone
         });
+        const created = response.data;
         this.$message.success("用户添加成功！");
+        // clear form
         this.addForm = { staffId: "", username: "", password: "", role: "USER", email: "", phone: "" };
-        this.fetchUsers();
+        // If we're on the first page, show the new user immediately by inserting into users list
+        if (this.currentPage === 1) {
+          // ensure shape matches table rows
+          const row = {
+            id: created.id,
+            staffId: created.staffId,
+            username: created.username,
+            role: created.role,
+            status: created.status || 'ACTIVE',
+            email: created.email || '',
+            phone: created.phone || '',
+            createdAt: created.createdAt
+          };
+          this.users.unshift(row);
+          // keep page size consistent
+          if (this.users.length > this.pageSize) this.users.pop();
+          this.totalElements = (this.totalElements || 0) + 1;
+        } else {
+          // otherwise switch to first page and refresh from server
+          this.currentPage = 1;
+          await this.fetchUsers();
+        }
       } catch (error) {
         console.error('Failed to create user:', error);
         this.$message.error('添加失败：' + (error.response?.data?.message || error.message));
