@@ -443,18 +443,18 @@ export default {
 
 /* 右侧表单标题增强 */
 .add-title {
-    color: #fff; /* 标题颜色改为白色 */
+    color: #000; /* 标题颜色改为黑色 */
     font-size: 20px;
     font-weight: bold; 
-    text-shadow: 0 1px 2px rgba(0,0,0,0.15); 
+    text-shadow: 0 1px 2px rgba(0,0,0,0.03);
     margin-bottom: 20px;
 }
-/* 核心修改：右侧表单标签颜色改为白色 */
+/* 核心修改：右侧表单标签颜色改为黑色 */
 .add-panel /deep/ .el-form-item__label {
-    color: #fff;
+    color: #000;
 }
 
-/* 右侧表单输入框/选择框 - 玻璃化 */
+/* 右侧表单输入框/选择框 - 玻璃化，确保输入文字为黑色 */
 .add-panel /deep/ .el-input__inner,
 .add-panel /deep/ .el-textarea__inner,
 .add-panel /deep/ .el-select .el-input__inner,
@@ -463,16 +463,13 @@ export default {
     background-color: rgba(255,255,255,0.92) !important;
     border-radius: 8px;
     border: 1px solid rgba(6,34,56,0.06);
+    color: #000 !important; /* ensure input text is black */
 }
 
-/* 确保 el-select 的 dropdown 背景也透明化，保持一致性 */
-.el-popper /deep/ .el-select-dropdown {
-    background-color: rgba(255, 255, 255, 0.9) !important;
-    backdrop-filter: blur(5px);
-    border-radius: 10px;
-}
-.el-popper /deep/ .el-select-dropdown__item {
-    color: #333;
+/* 确保下拉选项文本为黑色 */
+.el-popper /deep/ .el-select-dropdown__item,
+.add-panel /deep/ .el-select-dropdown__item {
+    color: #000;
 }
 
 

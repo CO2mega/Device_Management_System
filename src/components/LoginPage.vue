@@ -63,23 +63,17 @@
             </div>
             
             <div class="input-box">
-              <span class="icon"><i class='bx bxs-envelope'></i></span>
-              <input type="email" v-model="registerEmail" required>
-              <label>邮箱</label>
-            </div>
-            
-            <div class="input-box">
               <span class="icon"><i class='bx bxs-lock-alt'></i></span>
               <input type="password" v-model="registerPassword" required>
               <label>密码</label>
             </div>
             
             <div class="remember-password">
-              <label><input type="checkbox" required>同意协议</label>
+              <label><!-- 同意协议复选框已移除 --></label>
             </div>
             
-            <button class="btn" type="submit">Sign Up</button>
-            
+            <button class="btn" type="submit">注册</button>
+
             <div class="create-account">
               <p>已有账户？ 
                 <a href="#" class="login-link" @click.prevent="toggleMode">登录</a>
@@ -126,7 +120,6 @@ export default {
       username: "",
       password: "",
       registerUsername: "",
-      registerEmail: "",
       registerPassword: "",
       forgotEmail: ""
     };
@@ -175,8 +168,8 @@ export default {
 
     // 处理注册逻辑
     async handleRegister() {
-      if (!this.registerUsername || !this.registerEmail || !this.registerPassword) {
-        alert("请完整填写注册信息");
+      if (!this.registerUsername || !this.registerPassword) {
+        alert("请完整填写注册信息（用户名与密码）");
         return;
       }
 
@@ -186,8 +179,8 @@ export default {
           staffId: this.registerUsername,
           username: this.registerUsername,
           password: this.registerPassword,
-          email: this.registerEmail,
-          phone: ''
+          email: null,
+          phone: null
         };
 
         await authApi.register(registerPayload);
