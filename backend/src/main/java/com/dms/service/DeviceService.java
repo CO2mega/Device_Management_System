@@ -11,6 +11,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+
 @Service
 @RequiredArgsConstructor
 public class DeviceService {
@@ -78,6 +80,11 @@ public class DeviceService {
         deviceRepository.delete(device);
     }
     
+    @Transactional(readOnly = true)
+    public List<String> getDeviceTypes() {
+        return deviceRepository.findDistinctTypes();
+    }
+
     private DeviceDto.Response toResponse(Device device) {
         return DeviceDto.Response.builder()
                 .id(device.getId())

@@ -10,6 +10,8 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/devices")
 @RequiredArgsConstructor
@@ -30,7 +32,12 @@ public class DeviceController {
     public ResponseEntity<DeviceDto.Response> findById(@PathVariable Long id) {
         return ResponseEntity.ok(deviceService.findById(id));
     }
-    
+
+    @GetMapping("/types")
+    public ResponseEntity<List<String>> findTypes() {
+        return ResponseEntity.ok(deviceService.getDeviceTypes());
+    }
+
     @PostMapping
     public ResponseEntity<DeviceDto.Response> create(@Valid @RequestBody DeviceDto.Request request) {
         return ResponseEntity.ok(deviceService.create(request));

@@ -134,7 +134,7 @@ INSERT INTO t_device (device_name, device_type, location, purchase_date, is_loan
 ('微波功率计', '检测设备', '实验室3', '2024-05-10', FALSE, '正常'),
 ('红外热像仪', '检测设备', '实验室2', '2024-06-01', FALSE, '正常'),
 ('电流表', '测量工具', '仓库C', '2024-03-15', FALSE, '正常'),
-('光学传感器', '传感器', '仓库C', '2024-01-08', FALSE, '维修中'),
+('光学传感器', '传感器', '仓库C', '2024-01-08', FALSE, '故障'),
 ('电源模块', '电子设备', '测试台', '2024-02-28', FALSE, '正常');
 
 -- Update some devices to be loaned (simulate current loans)
@@ -174,6 +174,112 @@ INSERT INTO t_loan_record (device_id, applicant_user_id, apply_date, expected_re
 INSERT INTO t_loan_record (device_id, applicant_user_id, apply_date, expected_return_date, approval_status, approved_by, approved_at, return_status, purpose, rejection_reason) VALUES
 (8, 4, '2025-11-26 09:00:00', '2025-12-20', 'REJECTED', 1, '2025-11-26 14:00:00', NULL, '设备类型不匹配', '设备类型不匹配使用需求'),
 (19, 9, '2025-11-05 11:00:00', '2025-11-30', 'REJECTED', 1, '2025-11-05 15:00:00', NULL, '需要电源模块', '库存不足');
+
+-- Create dashboard aggregates (materialized single-row summary for homepage)
+CREATE TABLE IF NOT EXISTS dashboard_aggregates (
+  id INT PRIMARY KEY DEFAULT 1,
+  total_devices INT DEFAULT 0,
+  loaned_devices INT DEFAULT 0,
+  status_normal INT DEFAULT 0,
+  status_fault INT DEFAULT 0,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Ensure single row exists
+INSERT INTO dashboard_aggregates (id) VALUES (1) ON DUPLICATE KEY UPDATE id = id;
+
+-- Stored procedure to refresh aggregates (can be called manually or by scheduler)
+DELIMITER $$
+CREATE PROCEDURE sp_refresh_dashboard_aggregates()
+BEGIN
+  UPDATE dashboard_aggregates SET
+    total_devices = (SELECT COUNT(*) FROM t_device),
+    loaned_devices = (SELECT COUNT(*) FROM t_device WHERE is_loaned = TRUE),
+    status_normal = (SELECT COUNT(*) FROM t_device WHERE status = '正常'),
+    status_fault = (SELECT COUNT(*) FROM t_device WHERE status = '故障'),
+    updated_at = CURRENT_TIMESTAMP
+  WHERE id = 1;
+END$$
+
+-- Stored procedure to return device status distribution (uses SQL aggregation)
+CREATE PROCEDURE sp_get_status_distribution()
+BEGIN
+  SELECT status AS device_status, COUNT(*) AS cnt
+  FROM t_device
+  GROUP BY status;
+END$$
+DELIMITER ;
+
+-- Initialize aggregates with current data
+CALL sp_refresh_dashboard_aggregates();
+
+-- View for device status distribution (for charts)
+CREATE OR REPLACE VIEW vw_device_status_distribution AS
+SELECT status AS device_status, COUNT(*) AS cnt
+FROM t_device
+GROUP BY status;
+
+-- Triggers to keep dashboard_aggregates up-to-date on device changes (incremental updates)
+DELIMITER $$
+CREATE TRIGGER trg_t_device_after_insert
+AFTER INSERT ON t_device
+FOR EACH ROW
+BEGIN
+  UPDATE dashboard_aggregates SET total_devices = total_devices + 1 WHERE id = 1;
+  IF NEW.is_loaned THEN
+    UPDATE dashboard_aggregates SET loaned_devices = loaned_devices + 1 WHERE id = 1;
+  END IF;
+  IF NEW.status = '正常' THEN
+    UPDATE dashboard_aggregates SET status_normal = status_normal + 1 WHERE id = 1;
+  ELSEIF NEW.status = '故障' THEN
+    UPDATE dashboard_aggregates SET status_fault = status_fault + 1 WHERE id = 1;
+  END IF;
+END$$
+
+CREATE TRIGGER trg_t_device_after_update
+AFTER UPDATE ON t_device
+FOR EACH ROW
+BEGIN
+  -- loaned count change
+  IF OLD.is_loaned <> NEW.is_loaned THEN
+    IF NEW.is_loaned THEN
+      UPDATE dashboard_aggregates SET loaned_devices = loaned_devices + 1 WHERE id = 1;
+    ELSE
+      UPDATE dashboard_aggregates SET loaned_devices = loaned_devices - 1 WHERE id = 1;
+    END IF;
+  END IF;
+
+  -- status change adjustments
+  IF OLD.status <> NEW.status THEN
+    IF OLD.status = '正常' THEN
+      UPDATE dashboard_aggregates SET status_normal = status_normal - 1 WHERE id = 1;
+    ELSEIF OLD.status = '故障' THEN
+      UPDATE dashboard_aggregates SET status_fault = status_fault - 1 WHERE id = 1;
+    END IF;
+
+    IF NEW.status = '正常' THEN
+      UPDATE dashboard_aggregates SET status_normal = status_normal + 1 WHERE id = 1;
+    ELSEIF NEW.status = '故障' THEN
+      UPDATE dashboard_aggregates SET status_fault = status_fault + 1 WHERE id = 1;
+    END IF;
+  END IF;
+END$$
+
+CREATE TRIGGER trg_t_device_after_delete
+AFTER DELETE ON t_device
+FOR EACH ROW
+BEGIN
+  UPDATE dashboard_aggregates SET total_devices = total_devices - 1 WHERE id = 1;
+  IF OLD.is_loaned THEN
+    UPDATE dashboard_aggregates SET loaned_devices = loaned_devices - 1 WHERE id = 1;
+  END IF;
+  IF OLD.status = '正常' THEN
+    UPDATE dashboard_aggregates SET status_normal = status_normal - 1 WHERE id = 1;
+  ELSEIF OLD.status = '故障' THEN
+    UPDATE dashboard_aggregates SET status_fault = status_fault - 1 WHERE id = 1;
+  END IF;
+END$$
+DELIMITER ;
 
 SET FOREIGN_KEY_CHECKS=1;
 

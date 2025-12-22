@@ -1,6 +1,9 @@
 <template>
   <div class="dashboard-home">
-    <div class="top-chart glass-card" ref="overviewChart"></div>
+    <div class="top-row">
+      <div class="top-chart glass-card" ref="overviewChart"></div>
+      <div class="status-pie glass-card" ref="statusPie"></div>
+    </div>
 
     <div class="dashboard">
       <div class="stat-card glass-card" v-for="(item, index) in stats" :key="index">
@@ -36,6 +39,7 @@ export default {
         { label: "注册用户", value: 0 },
       ],
       deviceTypeData: [],
+      statusCounts: { normal: 0, fault: 0 },
       loading: false
     };
   },
@@ -57,25 +61,30 @@ export default {
           { label: "注册用户", value: data.totalUsers },
         ];
 
-        // Fetch devices to calculate type distribution
+        // Use backend stored-procedure based endpoint that returns status distribution
+        const statusResp = await dashboardApi.getStatusDistribution();
+        const statusMap = statusResp.data || {};
+        // Map values into counts and also fetch device types via API for the left chart
+        this.statusCounts = { normal: statusMap['正常'] || 0, fault: statusMap['故障'] || 0 };
+
+        // Still fetch device types via deviceApi (paged). For accurate counts, backend endpoint is preferred but
+        // we preserve client-side type aggregation for now.
         const devicesResponse = await deviceApi.getAll({ size: 100 });
-        const devices = devicesResponse.data.content;
-        
-        // Calculate device type distribution
+        const devices = Array.isArray(devicesResponse.data) ? devicesResponse.data : (devicesResponse.data && devicesResponse.data.content ? devicesResponse.data.content : []);
+
         const typeCount = {};
         devices.forEach(device => {
           const type = device.type || '其他';
           typeCount[type] = (typeCount[type] || 0) + 1;
         });
-        
         this.deviceTypeData = Object.entries(typeCount).map(([name, value]) => ({ name, value }));
-      } catch (error) {
-        console.error('Failed to fetch dashboard data:', error);
-        this.$message.error('获取统计数据失败');
-      } finally {
-        this.loading = false;
-      }
-    },
+       } catch (error) {
+         console.error('Failed to fetch dashboard data:', error);
+         this.$message.error('获取统计数据失败');
+       } finally {
+         this.loading = false;
+       }
+     },
     initCharts() {
       // 顶部概览图 (颜色主题调整)
       const overviewChart = echarts.init(this.$refs.overviewChart);
@@ -102,6 +111,28 @@ export default {
             },
           },
         ],
+      });
+
+      // 右侧：状态饼图（正常 / 故障）
+      const statusChart = echarts.init(this.$refs.statusPie);
+      const statusData = [
+        { value: this.statusCounts.normal || 0, name: '正常' },
+        { value: this.statusCounts.fault || 0, name: '故障' }
+      ];
+      statusChart.setOption({
+        title: { text: '设备状态（正常/故障）', left: 'center', textStyle: { color: SECONDARY_COLOR } },
+        tooltip: { trigger: 'item' },
+        series: [
+          {
+            name: '设备状态',
+            type: 'pie',
+            radius: ['40%', '70%'],
+            avoidLabelOverlap: false,
+            label: { show: true, position: 'outside', formatter: '{b}: {c}' },
+            data: statusData,
+            color: [PRIMARY_COLOR_START, PRIMARY_COLOR_END]
+          }
+        ]
       });
 
       // 设备状态图
@@ -159,6 +190,7 @@ export default {
 
       window.addEventListener("resize", () => {
         overviewChart.resize();
+        statusChart.resize();
         deviceChart.resize();
         userChart.resize();
       });
@@ -181,6 +213,15 @@ export default {
     border-radius: 12px;
     padding: 16px;
 }
+
+/* 顶部两栏布局：左侧类型图，右侧状态饼图 */
+.top-row{
+  display:flex;
+  gap:16px;
+  margin-bottom:24px;
+}
+.top-chart{ flex:1; height:350px }
+.status-pie{ width:300px; height:350px; padding:16px }
 
 /* 针对特定组件应用通用卡片样式 */
 .top-chart {

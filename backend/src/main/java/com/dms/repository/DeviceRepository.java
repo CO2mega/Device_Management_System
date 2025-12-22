@@ -10,6 +10,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import jakarta.persistence.LockModeType;
+import java.util.List;
 import java.util.Optional;
 
 @Repository
@@ -31,4 +32,7 @@ public interface DeviceRepository extends JpaRepository<Device, Long> {
     long countByIsLoaned(Boolean isLoaned);
     
     boolean existsByNameAndIdNot(String name, Long id);
+
+    @Query("SELECT DISTINCT d.type FROM Device d WHERE d.type IS NOT NULL")
+    List<String> findDistinctTypes();
 }

@@ -19,6 +19,10 @@ export const deviceApi = {
     return api.get(`/devices/${id}`);
   },
   
+  getTypes() {
+    return api.get('/devices/types');
+  },
+
   create(device) {
     return api.post('/devices', device);
   },
@@ -83,5 +87,9 @@ export const loanApi = {
 export const dashboardApi = {
   getStatistics() {
     return api.get('/dashboard/statistics');
+  },
+
+  getStatusDistribution() {
+    return api.get('/dashboard/status-distribution');
   }
 };

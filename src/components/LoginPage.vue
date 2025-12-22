@@ -55,27 +55,23 @@
         <div class="form-box register">
           <form @submit.prevent="handleRegister">
             <h2>注册</h2>
-            
+
             <div class="input-box">
               <span class="icon"><i class='bx bxs-user'></i></span>
               <input type="text" v-model="registerUsername" required>
               <label>用户名</label>
             </div>
-            
+
             <div class="input-box">
               <span class="icon"><i class='bx bxs-lock-alt'></i></span>
               <input type="password" v-model="registerPassword" required>
               <label>密码</label>
             </div>
-            
-            <div class="remember-password">
-              <label><!-- 同意协议复选框已移除 --></label>
-            </div>
-            
+
             <button class="btn" type="submit">注册</button>
 
             <div class="create-account">
-              <p>已有账户？ 
+              <p>已有账户？
                 <a href="#" class="login-link" @click.prevent="toggleMode">登录</a>
               </p>
             </div>
@@ -241,24 +237,25 @@ export default {
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
-  width: 75%;
+  width: 90%;
+  max-width: 1100px; /* limit overall width so panels don't stretch indefinitely on ultra-wide screens */
   height: 550px;
   margin-top: 20px;
   background: url('@/assets/4.png') no-repeat center center/cover;
   border-radius: 20px;
   overflow: hidden;
   z-index: 2;
+  display: flex; /* use flex layout to make two-column stable */
+  align-items: stretch;
 }
 
 /* === 左侧内容区 (Logo & Welcome) === */
 .item {
-  position: absolute;
-  top: 0;
-  left: 0;
+  /* left column */
   width: 58%;
   height: 100%;
   color: #fff;
-  padding: 80px;
+  padding: 60px; /* slightly reduced padding for wide screens */
   display: flex;
   justify-content: space-between;
   flex-direction: column;
@@ -277,9 +274,7 @@ export default {
 
 /* === 右侧登录/注册区域 (核心动画区) === */
 .login-section {
-  position: absolute;
-  top: 0;
-  right: 0;
+  /* right column */
   width: calc(100% - 58%); /* 剩余宽度 */
   height: 100%;
   color: #fff;
@@ -287,6 +282,8 @@ export default {
   /* 玻璃拟态效果 */
   backdrop-filter: blur(10px);
   background: rgba(255, 255, 255, 0.05); 
+  overflow: hidden; /* 隐藏移出视口的滑动面板，防止超宽屏时露出 */
+  position: relative; /* keep children absolute within this area */
 }
 
 /* 通用的表单容器 */
@@ -298,35 +295,42 @@ export default {
   width: 100%;
   height: 100%;
   padding: 0 40px;
+  left: 0; /* 明确对齐到父容器左侧，保证 translateX 相对位置一致 */
+  top: 0;
+  z-index: 1;
 }
 
 /* --- 动画核心：注册表单 --- */
 .form-box.register {
-  transform: translateX(430px); /* 默认移出右侧视野 */
+  transform: translateX(100%); /* 默认移出右侧视野，按自身宽度移动，适配超宽屏 */
   transition: transform 0.6s ease; /* 动画时长 */
   transition-delay: 0s; /* 消失时立即执行 */
   pointer-events: none; /* 隐藏时不可点击 */
+  z-index: 1; /* 默认层级靠后 */
 }
 
 /* 当父级有 .active 类时 (即点击了注册) */
 .login-section.active .form-box.register {
-  transform: translateX(0px); /* 移入视野 */
+  transform: translateX(0); /* 移入视野 */
   transition-delay: 0.7s; /* 延迟执行，等待登录框先移开 */
   pointer-events: auto;
+  z-index: 3; /* 激活时置顶 */
 }
 
 /* --- 动画核心：登录表单 --- */
 .form-box.login {
-  transform: translateX(0px); /* 默认在视野内 */
+  transform: translateX(0); /* 默认在视野内 */
   transition: transform 0.6s ease;
   transition-delay: 0.7s; /* 出现时延迟 */
+  z-index: 2; /* 登录面板默认在顶层，方便点击 */
 }
 
 /* 当父级有 .active 类时 (即点击了注册) */
 .login-section.active .form-box.login {
-  transform: translateX(430px); /* 秼出右侧视野 */
+  transform: translateX(-100%); /* 移出视野（向左），使用百分比以适配不同宽度 */
   transition-delay: 0s; /* 立即移走 */
   pointer-events: none;
+  z-index: 1; /* 被注册面板覆盖 */
 }
 
 /* === 输入框与浮动标签 === */
