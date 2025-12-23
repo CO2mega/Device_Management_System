@@ -14,7 +14,16 @@
 
     <div class="charts">
       <div ref="deviceChart" class="chart glass-card"></div>
-      <div ref="userChart" class="chart glass-card"></div>
+      <div class="status-summary glass-card">
+        <div class="status-item">
+          <h4>正常</h4>
+          <p class="status-value">{{ statusCounts.normal }}</p>
+        </div>
+        <div class="status-item fault">
+          <h4>故障</h4>
+          <p class="status-value">{{ statusCounts.fault }}</p>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -158,41 +167,10 @@ export default {
         ],
       });
 
-      // 用户趋势图
-      const userChart = echarts.init(this.$refs.userChart);
-      const totalUsers = this.stats[3].value;
-      
-      // Simulate user registration trend based on current total
-      const months = ["1月", "2月", "3月", "4月", "5月", "6月"];
-      const userTrend = months.map((_, index) => Math.round(totalUsers * (index + 1) / months.length));
-      
-      userChart.setOption({
-        title: { text: "用户注册趋势", left: "center", textStyle: { color: SECONDARY_COLOR } },
-        tooltip: { trigger: "axis" },
-        xAxis: { type: "category", data: months, axisLine: { lineStyle: { color: SECONDARY_COLOR } } },
-        yAxis: { type: "value", axisLine: { lineStyle: { color: SECONDARY_COLOR } } },
-        series: [
-          {
-            data: userTrend,
-            type: "line",
-            smooth: true,
-            lineStyle: { color: PRIMARY_COLOR_START },
-            itemStyle: { color: PRIMARY_COLOR_START },
-            areaStyle: {
-              color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-                { offset: 0, color: 'rgba(0,192,255,0.18)' },
-                { offset: 1, color: 'rgba(255,255,255,0)' },
-              ])
-            },
-          },
-        ],
-      });
-
       window.addEventListener("resize", () => {
         overviewChart.resize();
         statusChart.resize();
         deviceChart.resize();
-        userChart.resize();
       });
     },
   },
@@ -260,13 +238,28 @@ export default {
 .charts {
   display: flex;
   justify-content: space-between;
-  flex-wrap: wrap;
+  align-items: flex-start;
   gap: 20px;
 }
 
 .chart {
-    /* 继承 .glass-card 样式 */
-  flex: 1;
-  height: 280px;
+  /* 设备状态图为弹性宽度，保持突出 */
+  flex: 1 1 60%;
+  height: 300px;
 }
+
+.status-summary {
+  width: 320px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.status-item { width: 100%; text-align: center; margin-bottom: 16px }
+.status-item h4 { margin: 0; color: #333 }
+.status-value { font-size: 28px; font-weight: bold; margin: 8px 0 }
+.status-item.fault .status-value { color: #e9646b }
+.status-item .status-value { color: #3fb07f }
 </style>

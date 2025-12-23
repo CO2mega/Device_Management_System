@@ -482,10 +482,10 @@ export default {
 }
 
 /* 编辑按钮 */
-.edit-button-styled { 
-  background: linear-gradient(90deg, var(--tech-cyan), var(--tech-violet));
-  color: #fff;
-  border: none;
+.edit-button-styled {
+  background: #F0F9EB;
+  color: #4CAF50;
+  border: 1px solid #B0E9B3;
 }
 /* 删除按钮 */
 .delete-button-styled { 

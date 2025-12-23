@@ -18,6 +18,14 @@
            >
             <el-table-column prop="id" label="设备编号" width="100"></el-table-column>
             <el-table-column prop="name" label="设备名称" min-width="150"></el-table-column>
+            <el-table-column prop="type" label="设备类型" min-width="120"></el-table-column>
+            <el-table-column prop="status" label="状态" width="110" align="center">
+              <template #default="{ row }">
+                <el-tag :type="row.status === '正常' ? 'success' : 'danger'" class="borrow-tag">
+                  {{ row.status }}
+                </el-tag>
+              </template>
+            </el-table-column>
             <el-table-column prop="location" label="存放位置" min-width="150"></el-table-column>
             
             <el-table-column prop="borrowed" label="是否借出" width="120" align="center">
@@ -78,6 +86,19 @@
               <el-input v-model="addForm.name" placeholder="请输入设备名称" />
             </el-form-item> 
 
+            <el-form-item label="设备类型">
+              <el-select v-model="addForm.type" placeholder="请选择设备类型" style="width: 100%">
+                <el-option label="传感器" value="传感器" />
+                <el-option label="检测设备" value="检测设备" />
+                <el-option label="监控设备" value="监控设备" />
+                <el-option label="电子设备" value="电子设备" />
+                <el-option label="测量工具" value="测量工具" />
+                <el-option label="配件" value="配件" />
+                <el-option label="网络设备" value="网络设备" />
+                <el-option label="计量设备" value="计量设备" />
+              </el-select>
+            </el-form-item>
+
             <el-form-item label="是否借出" required>
               <el-select v-model="addForm.borrowed" placeholder="请选择" style="width: 100%">
                 <el-option label="是" value="是" />
@@ -132,7 +153,18 @@
     >
       <el-form :model="editForm" label-width="100px">
         <el-form-item label="设备名称"><el-input v-model="editForm.name" /></el-form-item>
-        <el-form-item label="设备类型"><el-input v-model="editForm.type" /></el-form-item>
+        <el-form-item label="设备类型">
+          <el-select v-model="editForm.type" placeholder="请选择设备类型">
+            <el-option label="传感器" value="传感器" />
+            <el-option label="检测设备" value="检测设备" />
+            <el-option label="监控设备" value="监控设备" />
+            <el-option label="电子设备" value="电子设备" />
+            <el-option label="测量工具" value="测量工具" />
+            <el-option label="配件" value="配件" />
+            <el-option label="网络设备" value="网络设备" />
+            <el-option label="计量设备" value="计量设备" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="editForm.status" placeholder="请选择状态">
             <el-option label="正常" value="正常" />
@@ -191,7 +223,7 @@ export default {
       totalElements: 0,
       editDialogVisible: false,
       editForm: {},
-      addForm: { name: "", type: "", status: "正常", borrowed: "否", location: "", purchaseDate: "", borrowDate: "" },
+      addForm: { name: "", type: null, status: "正常", borrowed: "否", location: "", purchaseDate: "", borrowDate: "" },
       devices: [],
       tableKey: 0,
       loading: false
@@ -279,7 +311,7 @@ export default {
         }
         await deviceApi.update(this.editForm.id, {
           name: this.editForm.name,
-          type: this.editForm.type,
+          type: this.editForm.type || null,
           status: this.editForm.status,
           location: this.editForm.location,
           purchaseDate: this.editForm.purchaseDate || null,
@@ -324,16 +356,16 @@ export default {
       try {
         await deviceApi.create({
           name: this.addForm.name,
-          type: this.addForm.type || "其他",
+          type: this.addForm.type || null,
           status: this.addForm.status || "正常",
           location: this.addForm.location,
           purchaseDate: this.addForm.purchaseDate || null
         });
         this.$message.success("添加成功！");
-        this.addForm = { name: "", type: "", status: "正常", borrowed: "否", location: "", purchaseDate: "", borrowDate: "" };
+        this.addForm = { name: "", type: null, status: "正常", borrowed: "否", location: "", purchaseDate: "", borrowDate: "" };
         this.fetchDevices();
       } catch (error) {
-        console.error('Failed to create device:', error);
+        console.error('Failed to add device:', error);
         this.$message.error('添加失败：' + (error.response?.data?.message || error.message));
       }
     }
@@ -342,7 +374,6 @@ export default {
 </script>
 
 <style scoped>
-/* 主题色变量（局部替代，组件样式内使用） */
 :root {
   --tech-cyan: #00c0ff;
   --tech-violet: #7a8cff;
@@ -350,39 +381,34 @@ export default {
 }
 
 /* -------------------- 整体容器和顶部控制 -------------------- */
-/* 将根容器名称改为 device-list-main-view 以匹配样式习惯 */
 .device-list-main-view {
   width: 100%;
   height: 100%;
-  padding: 20px; /* 增加外部 padding，让内容块与边缘有间距 */
-  background-color: transparent; 
+  padding: 20px;
+  background-color: transparent;
   display: flex;
-  flex-direction: column; 
+  flex-direction: column;
 }
 
 .top-header-controls {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 20px; 
+    margin-bottom: 20px;
 }
 
 /* -------------------- 下方分栏区域 -------------------- */
 .content-split-area {
-    flex-grow: 1; 
+    flex-grow: 1;
 }
 
-/* 移除 el-col 上的 wrapper 样式，让表格紧贴列空间 */
 .table-content-block {
     display: flex;
     flex-direction: column;
-    padding: 0 !important; 
-    min-height: 320px; /* ensure table area doesn't collapse */
+    padding: 0 !important;
 }
 
-
-/* ========================= 左侧：设备列表表格 (高透明度玻璃化) ========================= */
-
+/* ========================= 左侧：设备列表表格 (样式与用户列表一致) ========================= */
 .styled-table.glass-table {
     border-radius: 15px;
     overflow: hidden;
@@ -391,7 +417,7 @@ export default {
     border: 1px solid rgba(122, 140, 255, 0.12);
     box-shadow: 0 8px 30px rgba(122, 140, 255, 0.06);
     flex-grow: 1;
-    min-height: 220px; /* give table area a minimum height */
+    min-height: 220px;
 }
 
 .styled-table /deep/ .el-table__header-wrapper th {
@@ -401,39 +427,31 @@ export default {
     border-color: rgba(6,34,56,0.06);
 }
 
-/* 核心修改：确保表格行背景透明 */
 .styled-table /deep/ .el-table__row {
-    background-color: transparent !important; 
+    background-color: transparent !important;
 }
 
-/* 数据行悬停效果 */
 .styled-table /deep/ .el-table__row:hover {
     background: linear-gradient(90deg, rgba(0,192,255,0.04), rgba(122,140,255,0.03)) !important;
 }
 
-/* Tag 风格：在线为青色，警告为紫色 */
+/* Tag 风格 */
 .borrow-tag {
     border-radius: 12px;
     padding: 0 10px;
     font-weight: 600;
 }
-.borrow-tag .el-tag--success {
-    background: linear-gradient(90deg, var(--tech-cyan), var(--tech-violet));
-    color: #fff;
-}
 
 /* 分页容器 */
 .pagination-container {
-    margin-top: 15px; 
+    margin-top: 15px;
     text-align: right;
     display: flex;
-    justify-content: flex-end; 
+    justify-content: flex-end;
 }
 
-
-/* ========================= 右侧：添加表单区 (渐变背景+玻璃输入框) ========================= */
+/* 右侧添加面板样式（与用户列表保持一致） */
 .add-panel {
-  /* 保持柔和渐变 */
   background: linear-gradient(135deg, rgba(0,192,255,0.12) 0%, rgba(122,140,255,0.14) 100%);
   padding: 20px;
   border-radius: 15px;
@@ -441,20 +459,18 @@ export default {
   height: 100%;
 }
 
-/* 右侧表单标题增强 */
 .add-title {
-    color: #000; /* 标题颜色改为黑色 */
+    color: #000;
     font-size: 20px;
-    font-weight: bold; 
+    font-weight: bold;
     text-shadow: 0 1px 2px rgba(0,0,0,0.03);
     margin-bottom: 20px;
 }
-/* 核心修改：右侧表单标签颜色改为黑色 */
+
 .add-panel /deep/ .el-form-item__label {
     color: #000;
 }
 
-/* 右侧表单输入框/选择框 - 玻璃化，确保输入文字为黑色 */
 .add-panel /deep/ .el-input__inner,
 .add-panel /deep/ .el-textarea__inner,
 .add-panel /deep/ .el-select .el-input__inner,
@@ -463,44 +479,33 @@ export default {
     background-color: rgba(255,255,255,0.92) !important;
     border-radius: 8px;
     border: 1px solid rgba(6,34,56,0.06);
-    color: #000 !important; /* ensure input text is black */
+    color: #000 !important;
 }
 
-/* 确保下拉选项文本为黑色 */
 .el-popper /deep/ .el-select-dropdown__item,
 .add-panel /deep/ .el-select-dropdown__item {
     color: #000;
 }
 
-
-/* -------------------- 按钮/搜索/分页细节样式 (采用柔和紫色作为主色调) -------------------- */
-.page-title {
-  font-size: 22px;
-  color: var(--deep-blue);
-  margin: 0;
-}
-
-/* 编辑按钮 - 柔和紫作为主操作色 */
+/* 按钮样式保持与用户列表一致 */
 .edit-button-styled {
   background: #F0F9EB;
   color: #4CAF50;
   border: 1px solid #B0E9B3;
 }
-/* 删除按钮 - 柔和蓝色 */
-.delete-button-styled { 
+.delete-button-styled {
     background: rgba(255, 80, 80, 0.12);
     color: #d64545;
     border: 1px solid rgba(214,69,69,0.12);
 }
 
-/* 提交添加按钮 - 柔和紫 */
 .submit-add-button-styled {
     width: 100%;
     margin-top: 10px;
     border-radius: 10px;
-    background-color: #9575CD !important; 
+    background-color: #9575CD !important;
     border-color: #9575CD !important;
     font-weight: bold;
-    box-shadow: 0 4px 10px rgba(149, 117, 205, 0.4); 
+    box-shadow: 0 4px 10px rgba(149, 117, 205, 0.4);
 }
 </style>
